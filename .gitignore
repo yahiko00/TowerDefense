@@ -160,3 +160,4 @@ version*/
 *.csproj.user
 *.suo
 *.config
+*.sln
