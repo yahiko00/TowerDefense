@@ -1,6 +1,5 @@
 ﻿// Concepts
-// * TypeDoc
-// * Unit Tests
+// * User Interaction
 
 /********************************************************
  * 2D Point
@@ -25,8 +24,8 @@ function distance(p1: Point, p2: Point): number {
  * Layout Cell
  *********************************************************/
 interface Cell {
-  col: number;
-  line: number;
+  col: number; // column
+  ln: number; // line
 } // Cell
 
 /********************************************************
@@ -34,7 +33,7 @@ interface Cell {
  * @param cell Cell to convert
  *********************************************************/
 function cell2point(cell: Cell): Point {
-  return { x: (cell.col + 0.5) * Tile.shapeSize, y: (cell.line + 0.5) * Tile.shapeSize }
+  return { x: (cell.col + 0.5) * Tile.shapeSize, y: (cell.ln + 0.5) * Tile.shapeSize }
 } // cell2point
 
 /********************************************************
@@ -57,6 +56,7 @@ class Tile implements Shape {
 
   type: number; // 0: wall, 1:path
   position: Point; // upper left corner
+  empty: boolean; // empty==false when there is a defending unit on this tile, true otherwise
 
   shape: Element; // DOM shape
   static shapeSize = 40; // shape's size
@@ -73,6 +73,7 @@ class Tile implements Shape {
     this.id = 'tile.' + Tile.ID++;
     this.type = type;
     this.position = { x: x, y: y };
+    this.empty = true;
   } // constructor
 
   /**
@@ -129,8 +130,8 @@ class Level implements Shape {
    * Constructor
    * @param layout level's layout (0: wall, 1:path)
    * @param path waypoints
-   * @param width level's width in tiles
-   * @param height level's height in tiles
+   * @param width level's width in cells
+   * @param height level's height in cells
    *********************************************************/
   constructor(layout: number[][], path: Cell[], width: number = 20, height: number = 13) {
     this.layout = layout;
@@ -320,16 +321,16 @@ class Defender implements Shape {
 
   /**
    * Constructor
-   * @param col column coordinate in tiles
-   * @param line line coordinate in tiles
+   * @param col column coordinate in cells
+   * @param ln line coordinate in cells
    * @param damage damage dealt to attacking units in HP (20)
    * @param range shooting range in pixels (50)
    * @param rate number of shoots per seconds (1)
    *********************************************************/
-  constructor(col: number, line: number, damage: number = 20, range: number = 50, rate: number = 1) {
+  constructor(col: number, ln: number, damage: number = 20, range: number = 50, rate: number = 1) {
     this.id = 'def.' + Defender.ID++;
     this.state = 'ready';
-    this.position = cell2point({ col: col, line: line });
+    this.position = cell2point({ col: col, ln: ln });
     this.damage = damage;
     this.range = range;
     this.rate = rate * 100 / Game.fps; // conversion
@@ -556,7 +557,7 @@ class Game {
         [0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
         [0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
       ],
-      [{ col: -1, line: 1 }, { col: 20, line: 1 }],
+      [{ col: -1, ln: 1 }, { col: 20, ln: 1 }],
       20, 13);
     Game.atks.push(new Attacker(Game.level.path));
     Game.defs.push(new Defender(10, 2));

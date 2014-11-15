@@ -9,7 +9,7 @@ level.setAttribute('height', '600');
 document.getElementById('viewport').appendChild(level);
 
 QUnit.test('Attacker.constructor', function (assert) {
-  var path = [{ col: -1, line: 1 }, { col: 10, line: 1 }];
+  var path = [{ col: -1, ln: 1 }, { col: 10, ln: 1 }];
   var att = new Attacker(path, 44);
   var begin = cell2point(path[0]);
   var end = cell2point(path[1]);
@@ -29,7 +29,7 @@ QUnit.test('Attacker.constructor', function (assert) {
 });
 
 QUnit.test('Attacker.move1', function (assert) {
-  var path = [{ col: -1, line: 1 }, { col: 10, line: 1 }];
+  var path = [{ col: -1, ln: 1 }, { col: 10, ln: 1 }];
   var att = new Attacker(path, 44, 250);
   var begin = cell2point(path[0]);
   var end = cell2point(path[1]);
@@ -46,7 +46,7 @@ QUnit.test('Attacker.move1', function (assert) {
 });
 
 QUnit.test('Attacker.move2', function (assert) {
-  var path = [{ col: 2, line: 1 }, { col: 3, line: 1 }, { col: 10, line: 1 }];
+  var path = [{ col: 2, ln: 1 }, { col: 3, ln: 1 }, { col: 10, ln: 1 }];
   var att = new Attacker(path, 44, 2500);
   var p0 = cell2point(path[0]);
   var p1 = cell2point(path[1]);
@@ -64,7 +64,7 @@ QUnit.test('Attacker.move2', function (assert) {
 });
 
 QUnit.test('Attacker.movePassed', function (assert) {
-  var path = [{ col: 9, line: 1 }, { col: 10, line: 1 }];
+  var path = [{ col: 9, ln: 1 }, { col: 10, ln: 1 }];
   var att = new Attacker(path, 100, 2500);
   var begin = cell2point(path[0]);
   var end = cell2point(path[1]);
@@ -84,7 +84,7 @@ QUnit.test('Attacker.movePassed', function (assert) {
 });
 
 QUnit.test('Attacker.hitAlive', function (assert) {
-  var path = [{ col: -1, line: 1 }, { col: 10, line: 1 }];
+  var path = [{ col: -1, ln: 1 }, { col: 10, ln: 1 }];
   var att = new Attacker(path, 100, 50);
   level.appendChild(att.draw());
   att.hit(50);
@@ -98,7 +98,7 @@ QUnit.test('Attacker.hitAlive', function (assert) {
 });
 
 QUnit.test('Attacker.hitDead', function (assert) {
-  var path = [{ col: -1, line: 1 }, { col: 10, line: 1 }];
+  var path = [{ col: -1, ln: 1 }, { col: 10, ln: 1 }];
   var att = new Attacker(path, 100, 50);
   level.appendChild(att.draw());
   att.hit(150);
@@ -123,7 +123,7 @@ QUnit.test('Defender.constructor', function (assert) {
 });
 
 QUnit.test('Defender.shoot', function (assert) {
-  var path = [{ col: 5, line: 1 }, { col: 10, line: 1 }];
+  var path = [{ col: 5, ln: 1 }, { col: 10, ln: 1 }];
   var att = new Attacker(path, 100, 50);
   var def = new Defender(5, 2, 20, 50, 1);
   level.appendChild(def.draw());
@@ -145,7 +145,7 @@ QUnit.test('Defender.shoot', function (assert) {
 });
 
 QUnit.test('Defender.aimOk1', function (assert) {
-  var path = [{ col: 5, line: 1 }, { col: 10, line: 1 }];
+  var path = [{ col: 5, ln: 1 }, { col: 10, ln: 1 }];
   var att = new Attacker(path, 100, 50);
   var def = new Defender(5, 2, 20, 50, 1);
   level.appendChild(def.draw());
@@ -172,7 +172,7 @@ QUnit.test('Defender.aimOk1', function (assert) {
 });
 
 QUnit.test('Bullet.constructor', function (assert) {
-  var path = [{ col: 5, line: 1 }, { col: 10, line: 1 }];
+  var path = [{ col: 5, ln: 1 }, { col: 10, ln: 1 }];
   var att = new Attacker(path, 100, 50);
   var bullet = new Bullet(5.5 * Tile.shapeSize, 2.5 * Tile.shapeSize, att, 100, 20);
 
@@ -190,7 +190,7 @@ QUnit.test('Bullet.constructor', function (assert) {
 });
 
 QUnit.test('Bullet.move', function (assert) {
-  var path = [{ col: 5, line: 1 }, { col: 10, line: 1 }];
+  var path = [{ col: 5, ln: 1 }, { col: 10, ln: 1 }];
   var begin = cell2point(path[0]);
   var att = new Attacker(path, 100, 50);
   var bullet = new Bullet(5.5 * Tile.shapeSize, 2.5 * Tile.shapeSize, att, 100, 20);
@@ -207,7 +207,7 @@ QUnit.test('Bullet.move', function (assert) {
 });
 
 QUnit.test('Bullet.moveHit', function (assert) {
-  var path = [{ col: 5, line: 1 }, { col: 10, line: 1 }];
+  var path = [{ col: 5, ln: 1 }, { col: 10, ln: 1 }];
   var begin = cell2point(path[0]);
   var att = new Attacker(path, 100, 50);
   var bullet = new Bullet(5.5 * Tile.shapeSize, 1.5 * Tile.shapeSize + 2, att, 100, 20);

@@ -1,6 +1,5 @@
 // Concepts
-// * TypeDoc
-// * Unit Tests
+// * User Interaction
 /********************************************************
  * Compute Euclidian distance between two 2D-points
  * @param p1 First point
@@ -16,7 +15,7 @@ function distance(p1, p2) {
  * @param cell Cell to convert
  *********************************************************/
 function cell2point(cell) {
-    return { x: (cell.col + 0.5) * Tile.shapeSize, y: (cell.line + 0.5) * Tile.shapeSize };
+    return { x: (cell.col + 0.5) * Tile.shapeSize, y: (cell.ln + 0.5) * Tile.shapeSize };
 } // cell2point
 /********************************************************
  * Tile
@@ -32,6 +31,7 @@ var Tile = (function () {
         this.id = 'tile.' + Tile.ID++;
         this.type = type;
         this.position = { x: x, y: y };
+        this.empty = true;
     } // constructor
     /**
      * Draw tile's shape in DOM
@@ -81,8 +81,8 @@ var Level = (function () {
      * Constructor
      * @param layout level's layout (0: wall, 1:path)
      * @param path waypoints
-     * @param width level's width in tiles
-     * @param height level's height in tiles
+     * @param width level's width in cells
+     * @param height level's height in cells
      *********************************************************/
     function Level(layout, path, width, height) {
         if (width === void 0) { width = 20; }
@@ -230,19 +230,19 @@ var Attacker = (function () {
 var Defender = (function () {
     /**
      * Constructor
-     * @param col column coordinate in tiles
-     * @param line line coordinate in tiles
+     * @param col column coordinate in cells
+     * @param ln line coordinate in cells
      * @param damage damage dealt to attacking units in HP (20)
      * @param range shooting range in pixels (50)
      * @param rate number of shoots per seconds (1)
      *********************************************************/
-    function Defender(col, line, damage, range, rate) {
+    function Defender(col, ln, damage, range, rate) {
         if (damage === void 0) { damage = 20; }
         if (range === void 0) { range = 50; }
         if (rate === void 0) { rate = 1; }
         this.id = 'def.' + Defender.ID++;
         this.state = 'ready';
-        this.position = cell2point({ col: col, line: line });
+        this.position = cell2point({ col: col, ln: ln });
         this.damage = damage;
         this.range = range;
         this.rate = rate * 100 / Game.fps; // conversion
@@ -439,7 +439,7 @@ var Game = (function () {
             [0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
             [0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
             [0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
-        ], [{ col: -1, line: 1 }, { col: 20, line: 1 }], 20, 13);
+        ], [{ col: -1, ln: 1 }, { col: 20, ln: 1 }], 20, 13);
         Game.atks.push(new Attacker(Game.level.path));
         Game.defs.push(new Defender(10, 2));
         Game.draw();
