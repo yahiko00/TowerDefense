@@ -1,5 +1,7 @@
 // Concepts
 // * User Interaction
+//   * Mouse over tile
+//   * Add defending unit
 /********************************************************
  * Compute Euclidian distance between two 2D-points
  * @param p1 First point
@@ -11,50 +13,80 @@ function distance(p1, p2) {
     return Math.sqrt(dx * dx + dy * dy);
 } // distance
 /********************************************************
- * Convert a cell into a point
- * @param cell Cell to convert
+ * Return the center point of a cell
+ * @param cell Cell
  *********************************************************/
-function cell2point(cell) {
+function cellCenter(cell) {
     return { x: (cell.col + 0.5) * Tile.shapeSize, y: (cell.ln + 0.5) * Tile.shapeSize };
-} // cell2point
+} // cellCenter
+/********************************************************
+ * Return the upper left point of a cell
+ * @param cell Cell
+ *********************************************************/
+function cellUpperLeft(cell) {
+    return { x: cell.col * Tile.shapeSize, y: cell.ln * Tile.shapeSize };
+} // cellUpperLeft
 /********************************************************
  * Tile
  *********************************************************/
 var Tile = (function () {
     /**
      * Constructor
-     * @param x upper left corner coordinate in pixels
-     * @param y upper left corner coordinate in pixels
-     * @param type type of tile (0: wall, 1: path)
+     * @param col Column coordinate in cells
+     * @param ln Line coordinate in cells
+     * @param type Type of tile (0: wall, 1: path)
      *********************************************************/
-    function Tile(type, x, y) {
+    function Tile(type, col, ln) {
         this.id = 'tile.' + Tile.ID++;
         this.type = type;
-        this.position = { x: x, y: y };
+        this.col = col;
+        this.ln = ln;
+        this.position = cellUpperLeft({ col: col, ln: ln });
         this.empty = true;
     } // constructor
     /**
      * Draw tile's shape in DOM
      *********************************************************/
     Tile.prototype.draw = function () {
+        var _this = this;
         this.shape = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
-        this.shape.setAttribute('class', 'tile');
         this.shape.setAttribute('id', this.id);
         this.shape.setAttribute('x', this.position.x.toString());
         this.shape.setAttribute('y', this.position.y.toString());
         this.shape.setAttribute('width', Tile.shapeSize.toString());
         this.shape.setAttribute('height', Tile.shapeSize.toString());
+        this.shape.setAttribute('stroke', Tile.shapeColorOutline);
+        this.shape.setAttribute('stroke-width', '0');
         switch (this.type) {
             case 0:
+                this.shape.setAttribute('class', 'tileWall');
                 this.shape.setAttribute('fill', Tile.shapeColorWall);
+                this.shape.addEventListener('click', function () {
+                    if (_this.empty) {
+                        // Add a defending unit
+                        var defender = new Defender(_this.col, _this.ln);
+                        Game.defs.push(defender);
+                        defender.draw();
+                        _this.empty = false;
+                    }
+                });
+                this.shape.addEventListener('mouseover', function () {
+                    if (_this.empty) {
+                        _this.shape.setAttribute('stroke-width', '1');
+                    }
+                });
+                this.shape.addEventListener('mouseout', function () {
+                    _this.shape.setAttribute('stroke-width', '0');
+                });
                 break;
             case 1:
+                this.shape.setAttribute('class', 'tilePath');
                 this.shape.setAttribute('fill', Tile.shapeColorPath);
                 break;
             default:
                 break;
         }
-        return this.shape;
+        Game.level.shape.appendChild(this.shape);
     }; // draw
     /**
      * Update tile within a timeframe
@@ -71,6 +103,7 @@ var Tile = (function () {
     Tile.shapeSize = 40; // shape's size
     Tile.shapeColorWall = '#7A7A7A'; // wall's color (lightgray)
     Tile.shapeColorPath = '#313131'; // path's color (darkgray)
+    Tile.shapeColorOutline = '#00FF00'; // outline's color (green)
     return Tile;
 })(); // Tile
 /********************************************************
@@ -79,20 +112,21 @@ var Tile = (function () {
 var Level = (function () {
     /**
      * Constructor
-     * @param layout level's layout (0: wall, 1:path)
-     * @param path waypoints
-     * @param width level's width in cells
-     * @param height level's height in cells
+     * @param layout Level's layout (0: wall, 1:path)
+     * @param path Waypoints
+     * @param width Width in cells
+     * @param height Height in cells
      *********************************************************/
     function Level(layout, path, width, height) {
         if (width === void 0) { width = 20; }
         if (height === void 0) { height = 13; }
         this.layout = layout;
+        this.path = path;
         this.tiles = [];
         for (var i = 0; i < layout.length; i++) {
             var col = layout[i];
             for (var j = 0; j < col.length; j++) {
-                var tile = new Tile(col[j], i * Tile.shapeSize, j * Tile.shapeSize);
+                var tile = new Tile(col[j], i, j);
                 this.tiles.push(tile);
             }
         }
@@ -108,9 +142,9 @@ var Level = (function () {
         this.shape.setAttribute('height', Level.shapeHeight.toString());
         for (var i = 0; i < this.tiles.length; i++) {
             var tile = this.tiles[i];
-            this.shape.appendChild(tile.draw());
+            tile.draw();
         }
-        return this.shape;
+        Game.viewport.appendChild(this.shape);
     }; // draw
     /**
      * Update level within a timeframe
@@ -133,7 +167,7 @@ var Attacker = (function () {
      * Constructor
      * @param path Set of waypoints
      * @param hp Hit points (100)
-     * @param speed pixels per second (50)
+     * @param speed Speed in pixels per second (50)
      * @param hitboxRadius Hitbox radius in pixels (10)
      *********************************************************/
     function Attacker(path, hp, speed, hitboxRadius) {
@@ -142,20 +176,20 @@ var Attacker = (function () {
         if (hitboxRadius === void 0) { hitboxRadius = 10; }
         this.id = 'atk.' + Attacker.ID++;
         this.state = 'alive';
-        this.position = cell2point(path[0]);
+        this.position = cellCenter(path[0]);
         this.path = path;
         this.hp = hp;
         this.speed = speed / Game.fps; // conversion
         this.hitboxRadius = hitboxRadius;
         this.waypoint = 1;
-        this.distWp = distance(this.position, cell2point(this.path[this.waypoint]));
+        this.distWp = distance(this.position, cellCenter(this.path[this.waypoint]));
     } // constructor
     /**
      * Move unit within a timeframe
      *********************************************************/
     Attacker.prototype.move = function () {
         var speed = this.speed;
-        var pointWp = cell2point(this.path[this.waypoint]);
+        var pointWp = cellCenter(this.path[this.waypoint]);
         while (this.distWp - speed <= 0) {
             // Carry over
             speed = speed - this.distWp;
@@ -169,7 +203,7 @@ var Attacker = (function () {
                 this.destroy();
                 return;
             }
-            var pointWp = cell2point(this.path[this.waypoint]);
+            var pointWp = cellCenter(this.path[this.waypoint]);
             this.distWp = distance(this.position, pointWp);
         }
         var dx = pointWp.x - this.position.x;
@@ -201,7 +235,7 @@ var Attacker = (function () {
         this.shape.setAttribute('cy', this.position.y.toString());
         this.shape.setAttribute('r', (Attacker.shapeSize / 2).toString());
         this.shape.setAttribute('fill', Attacker.shapeColor);
-        return this.shape;
+        Game.level.shape.appendChild(this.shape);
     }; // draw
     /**
      * Update unit within a timeframe
@@ -230,11 +264,11 @@ var Attacker = (function () {
 var Defender = (function () {
     /**
      * Constructor
-     * @param col column coordinate in cells
-     * @param ln line coordinate in cells
-     * @param damage damage dealt to attacking units in HP (20)
-     * @param range shooting range in pixels (50)
-     * @param rate number of shoots per seconds (1)
+     * @param col Column coordinate in cells
+     * @param ln Line coordinate in cells
+     * @param damage Damage dealt to attacking units in HP (20)
+     * @param range Shooting range in pixels (50)
+     * @param rate Number of shoots per seconds (1)
      *********************************************************/
     function Defender(col, ln, damage, range, rate) {
         if (damage === void 0) { damage = 20; }
@@ -242,7 +276,7 @@ var Defender = (function () {
         if (rate === void 0) { rate = 1; }
         this.id = 'def.' + Defender.ID++;
         this.state = 'ready';
-        this.position = cell2point({ col: col, ln: ln });
+        this.position = cellCenter({ col: col, ln: ln });
         this.damage = damage;
         this.range = range;
         this.rate = rate * 100 / Game.fps; // conversion
@@ -277,7 +311,7 @@ var Defender = (function () {
         var bullet = new Bullet(this.position.x, this.position.y, target);
         this.state = 'cooldown';
         Game.bullets.push(bullet);
-        this.shape.parentNode.appendChild(bullet.draw());
+        bullet.draw();
         return bullet;
     }; // shoot
     /**
@@ -302,7 +336,7 @@ var Defender = (function () {
         this.shape.setAttribute('width', Defender.shapeSize.toString());
         this.shape.setAttribute('height', Defender.shapeSize.toString());
         this.shape.setAttribute('fill', Defender.shapeColor);
-        return this.shape;
+        Game.level.shape.appendChild(this.shape);
     }; // draw
     /**
      * Update unit within a timeframe
@@ -338,9 +372,9 @@ var Bullet = (function () {
      * Constructor
      * @param x x center coordinate in pixels
      * @param y y center coordinate in pixels
-     * @param target bullet's target
-     * @param speed pixels per second
-     * @param damage damage dealt to attacking units in HP (20)
+     * @param target Bullet's target
+     * @param speed Pixels per second
+     * @param damage Damage dealt to attacking units in HP (20)
      *********************************************************/
     function Bullet(x, y, target, speed, damage) {
         if (speed === void 0) { speed = 100; }
@@ -358,11 +392,16 @@ var Bullet = (function () {
      *********************************************************/
     Bullet.prototype.move = function () {
         // target reached
-        if (this.distTg - this.speed <= 0) {
+        if (this.distTg - this.speed <= 0 && this.target.state === 'alive') {
             this.state = 'dead';
             this.target.hit(this.damage);
             this.destroy();
             return;
+        }
+        // target not alive: auto-destruction
+        if (this.target.state != 'alive') {
+            this.state = 'dead';
+            this.destroy();
         }
         var dx = this.target.position.x - this.position.x;
         var dy = this.target.position.y - this.position.y;
@@ -383,7 +422,7 @@ var Bullet = (function () {
         this.shape.setAttribute('cy', this.position.y.toString());
         this.shape.setAttribute('r', Bullet.shapeSize.toString());
         this.shape.setAttribute('fill', Bullet.shapeColor);
-        return this.shape;
+        Game.level.shape.appendChild(this.shape);
     }; // draw
     /**
      * Update bullet within a timeframe
@@ -441,7 +480,6 @@ var Game = (function () {
             [0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
         ], [{ col: -1, ln: 1 }, { col: 20, ln: 1 }], 20, 13);
         Game.atks.push(new Attacker(Game.level.path));
-        Game.defs.push(new Defender(10, 2));
         Game.draw();
     }; // init
     /**
@@ -449,14 +487,14 @@ var Game = (function () {
      *********************************************************/
     Game.draw = function () {
         Game.viewport = document.getElementById(Game.viewportID);
-        Game.viewport.appendChild(Game.level.draw());
+        Game.level.draw();
         for (var i = 0; i < Game.atks.length; i++) {
             var atk = Game.atks[i];
-            Game.level.shape.appendChild(atk.draw());
+            atk.draw();
         }
         for (var i = 0; i < Game.defs.length; i++) {
             var def = Game.defs[i];
-            Game.level.shape.appendChild(def.draw());
+            def.draw();
         }
     }; // draw
     /**
