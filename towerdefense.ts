@@ -1,10 +1,9 @@
 ﻿// Concepts
-// * States
-// * Defender
-// * Shots
+// * TypeDoc
+// * Unit Tests
 
 /********************************************************
- * Point 2D
+ * 2D Point
  *********************************************************/
 interface Point {
   x: number;
@@ -21,6 +20,22 @@ function distance(p1: Point, p2: Point): number {
   var dy = p2.y - p1.y;
   return Math.sqrt(dx * dx + dy * dy);
 } // distance
+
+/********************************************************
+ * Layout Cell
+ *********************************************************/
+interface Cell {
+  col: number;
+  line: number;
+} // Cell
+
+/********************************************************
+ * Convert a cell into a point
+ * @param cell Cell to convert
+ *********************************************************/
+function cell2point(cell: Cell): Point {
+  return { x: (cell.col + 0.5) * Tile.shapeSize, y: (cell.line + 0.5) * Tile.shapeSize }
+} // cell2point
 
 /********************************************************
  * Shape in DOM
@@ -48,21 +63,21 @@ class Tile implements Shape {
   static shapeColorWall = '#7A7A7A'; // wall's color (lightgray)
   static shapeColorPath = '#313131'; // path's color (darkgray)
 
-  /*-------------------------------------------------------
+  /**
    * Constructor
    * @param x upper left corner coordinate in pixels
    * @param y upper left corner coordinate in pixels
    * @param type type of tile (0: wall, 1: path)
-   *-------------------------------------------------------*/
+   *********************************************************/
   constructor(type: number, x: number, y: number) {
     this.id = 'tile.' + Tile.ID++;
     this.type = type;
     this.position = { x: x, y: y };
   } // constructor
 
-  /*-------------------------------------------------------
+  /**
    * Draw tile's shape in DOM
-   *-------------------------------------------------------*/
+   *********************************************************/
   draw(): Element {
     this.shape = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
     this.shape.setAttribute('class', 'tile');
@@ -84,15 +99,15 @@ class Tile implements Shape {
     return this.shape;
   } // draw
 
-  /*-------------------------------------------------------
+  /**
    * Update tile within a timeframe
-   *-------------------------------------------------------*/
+   *********************************************************/
   update() {
   } // update
 
-  /*-------------------------------------------------------
+  /**
    * Destroy tile's shape in DOM
-   *-------------------------------------------------------*/
+   *********************************************************/
   destroy() {
     this.shape.parentNode.removeChild(this.shape);
   } // destroy
@@ -104,26 +119,21 @@ class Tile implements Shape {
 class Level implements Shape {
   layout: number[][]; // level's layout (0: wall, 1:path)
   tiles: Tile[]; // level's tile
-  path: Point[]; // waypoints
+  path: Cell[]; // waypoints
 
   shape: Element; // DOM shape
   static shapeWidth: number; // level's width in pixels
   static shapeHeight: number; // level's height in pixels
 
-  /*-------------------------------------------------------
+  /**
    * Constructor
    * @param layout level's layout (0: wall, 1:path)
    * @param path waypoints
    * @param width level's width in tiles
    * @param height level's height in tiles
-   *-------------------------------------------------------*/
-  constructor(layout: number[][], path: Point[], width: number = 20, height: number = 13) {
+   *********************************************************/
+  constructor(layout: number[][], path: Cell[], width: number = 20, height: number = 13) {
     this.layout = layout;
-    this.path = [];
-    for (var i = 0; i < path.length; i++) {
-      var point = path[i];
-      this.path.push({ x: (point.x + 0.5) * Tile.shapeSize, y: (point.y + 0.5) * Tile.shapeSize });
-    } // for i
 
     this.tiles = [];
     for (var i = 0; i < layout.length; i++) {
@@ -138,9 +148,9 @@ class Level implements Shape {
     Level.shapeHeight = height * Tile.shapeSize;
   } // constructor
 
-  /*-------------------------------------------------------
+  /**
    * Draw level's shape in DOM
-   *-------------------------------------------------------*/
+   *********************************************************/
   draw(): Element {
     this.shape = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
     this.shape.setAttribute('width', Level.shapeWidth.toString());
@@ -154,15 +164,15 @@ class Level implements Shape {
     return this.shape;
   } // draw
 
-  /*-------------------------------------------------------
+  /**
    * Update level within a timeframe
-   *-------------------------------------------------------*/
+   *********************************************************/
   update() {
   } // update
 
-  /*-------------------------------------------------------
+  /**
    * Destroy level's shape in DOM
-   *-------------------------------------------------------*/
+   *********************************************************/
   destroy() {
     this.shape.parentNode.removeChild(this.shape);
   } // destroy
@@ -177,7 +187,7 @@ class Attacker implements Shape {
   state: string; // alive, passed, dead
 
   position: Point; // center
-  path: Point[]; // waypoints
+  path: Cell[]; // waypoints
   hp: number; // hit points
   speed: number; // pixels per frame
   hitboxRadius: number; // hitbox's radius
@@ -189,30 +199,31 @@ class Attacker implements Shape {
   static shapeSize = 20; // shape's size
   static shapeColor = '#FF3333'; // shape's color (lightred)
 
-  /*-------------------------------------------------------
+  /**
    * Constructor
    * @param path Set of waypoints
    * @param hp Hit points (100)
    * @param speed pixels per second (50)
    * @param hitboxRadius Hitbox radius in pixels (10)
-   *-------------------------------------------------------*/
-  constructor(path: Point[], hp: number = 100, speed: number = 50, hitboxRadius: number = 10) {
+   *********************************************************/
+  constructor(path: Cell[], hp: number = 100, speed: number = 50, hitboxRadius: number = 10) {
     this.id = 'atk.' + Attacker.ID++;
     this.state = 'alive';
-    this.position = { x: path[0].x, y: path[0].y };
+    this.position = cell2point(path[0]);
     this.path = path;
     this.hp = hp;
     this.speed = speed / Game.fps; // conversion
     this.hitboxRadius = hitboxRadius;
     this.waypoint = 1;
-    this.distWp = distance(this.position, this.path[this.waypoint]);
+    this.distWp = distance(this.position, cell2point(this.path[this.waypoint]));
   } // constructor
 
-  /*-------------------------------------------------------
+  /**
    * Move unit within a timeframe
-   *-------------------------------------------------------*/
+   *********************************************************/
   move() {
     var speed = this.speed;
+    var pointWp = cell2point(this.path[this.waypoint]);
 
     // Waypoint(s) reached
     // skip waypoint(s) if necessary
@@ -221,30 +232,33 @@ class Attacker implements Shape {
       speed = speed - this.distWp;
 
       // Move to next waypoint
-      this.position.x = this.path[this.waypoint].x;
-      this.position.y = this.path[this.waypoint].y;
+      this.position = pointWp;
       this.waypoint++;
 
       // End of path
       if (this.waypoint > this.path.length - 1) {
+        this.distWp = 0;
         this.state = 'passed';
         this.destroy();
         return;
       }
+
+      var pointWp = cell2point(this.path[this.waypoint]);
+      this.distWp = distance(this.position, pointWp);
     } // while
 
-    var dx = this.path[this.waypoint].x - this.position.x;
-    var dy = this.path[this.waypoint].y - this.position.y;
-    var distance = Math.sqrt(dx * dx + dy * dy);
-    var ratio = speed / distance;
+    var dx = pointWp.x - this.position.x;
+    var dy = pointWp.y - this.position.y;
+    var dist = Math.sqrt(dx * dx + dy * dy);
+    var ratio = speed / dist;
     this.position.x += dx * ratio;
     this.position.y += dy * ratio;
-    this.distWp = distance - speed;
+    this.distWp = dist - speed;
   } // move
 
-  /*-------------------------------------------------------
+  /**
    * Inflict damage to unit
-   *-------------------------------------------------------*/
+   *********************************************************/
   hit(damage: number) {
     this.hp -= damage;
     if (this.hp <= 0) {
@@ -253,9 +267,9 @@ class Attacker implements Shape {
     }
   } // hit
 
-  /*-------------------------------------------------------
+  /**
    * Draw unit's shape in DOM
-   *-------------------------------------------------------*/
+   *********************************************************/
   draw(): Element {
     this.shape = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
     this.shape.setAttribute('class', 'attacker');
@@ -267,9 +281,9 @@ class Attacker implements Shape {
     return this.shape;
   } // draw
 
-  /*-------------------------------------------------------
+  /**
    * Update unit within a timeframe
-   *-------------------------------------------------------*/
+   *********************************************************/
   update() {
     if (this.state === 'alive') {
       this.move();
@@ -278,9 +292,9 @@ class Attacker implements Shape {
     }
   } // update
 
-  /*-------------------------------------------------------
+  /**
    * Destroy unit's shape in DOM
-   *-------------------------------------------------------*/
+   *********************************************************/
   destroy() {
     this.shape.parentNode.removeChild(this.shape);
   } // destroy
@@ -304,27 +318,27 @@ class Defender implements Shape {
   static shapeSize = Tile.shapeSize * 0.75; // shape's size
   static shapeColor = '#0047B2'; // shape's color (blue)
 
-  /*-------------------------------------------------------
+  /**
    * Constructor
-   * @param x x center coordinate in pixels
-   * @param y y center coordinate in pixels
+   * @param col column coordinate in tiles
+   * @param line line coordinate in tiles
    * @param damage damage dealt to attacking units in HP (20)
    * @param range shooting range in pixels (50)
-   * @param rate number of shoots per seconds
-   *-------------------------------------------------------*/
-  constructor(x: number, y: number, damage: number = 20, range: number = 50, rate: number = 1) {
+   * @param rate number of shoots per seconds (1)
+   *********************************************************/
+  constructor(col: number, line: number, damage: number = 20, range: number = 50, rate: number = 1) {
     this.id = 'def.' + Defender.ID++;
     this.state = 'ready';
-    this.position = { x: x, y: y };
+    this.position = cell2point({ col: col, line: line });
     this.damage = damage;
     this.range = range;
     this.rate = rate * 100 / Game.fps; // conversion
     this.delay = 100 / this.rate;
   } // constructor
 
-  /*-------------------------------------------------------
+  /**
    * Aim at a target among all possible attacking units
-   *-------------------------------------------------------*/
+   *********************************************************/
   aim() {
     var minDist = Number.POSITIVE_INFINITY;
     var target: Attacker;
@@ -341,25 +355,28 @@ class Defender implements Shape {
 
     // Attacker is within range: fire!
     if (minDist <= this.range) {
-      this.shoot(target);
+      return this.shoot(target);
     }
+
+    return null;
   } // aim
 
-  /*-------------------------------------------------------
-   * Shoot at a target among all possible attacking units
-   * emitting a bullet
+  /**
+   * Shoot at a given target emitting a bullet.
+   * <br />Defending unit enters in a cooldown state.
    * @param target Attacking unit
-   *-------------------------------------------------------*/
-  shoot(target: Attacker) {
+   *********************************************************/
+  shoot(target: Attacker): Bullet {
     var bullet = new Bullet(this.position.x, this.position.y, target);
-    this.shape.parentNode.appendChild(bullet.draw());
-    Game.bullets.push(bullet);
     this.state = 'cooldown';
+    Game.bullets.push(bullet);
+    this.shape.parentNode.appendChild(bullet.draw());
+    return bullet;
   } // shoot
 
-  /*-------------------------------------------------------
+  /**
    * Decrease the cooldown counter within a timeframe
-   *-------------------------------------------------------*/
+   *********************************************************/
   cooldown() {
     this.delay--;
 
@@ -369,24 +386,24 @@ class Defender implements Shape {
     }
   } // cooldown
 
-  /*-------------------------------------------------------
+  /**
    * Draw unit's shape in DOM
-   *-------------------------------------------------------*/
+   *********************************************************/
   draw(): Element {
     this.shape = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
     this.shape.setAttribute('class', 'defender');
     this.shape.setAttribute('id', this.id);
-    this.shape.setAttribute('x', (this.position.x + (Tile.shapeSize - Defender.shapeSize) / 2).toString());
-    this.shape.setAttribute('y', (this.position.y + (Tile.shapeSize - Defender.shapeSize) / 2).toString());
+    this.shape.setAttribute('x', (this.position.x - Defender.shapeSize / 2).toString());
+    this.shape.setAttribute('y', (this.position.y - Defender.shapeSize / 2).toString());
     this.shape.setAttribute('width', Defender.shapeSize.toString());
     this.shape.setAttribute('height', Defender.shapeSize.toString());
     this.shape.setAttribute('fill', Defender.shapeColor);
     return this.shape;
   } // draw
 
-  /*-------------------------------------------------------
+  /**
    * Update unit within a timeframe
-   *-------------------------------------------------------*/
+   *********************************************************/
   update() {
     switch (this.state) {
       case 'ready':
@@ -400,9 +417,9 @@ class Defender implements Shape {
     } // switch
   } // update
 
-  /*-------------------------------------------------------
+  /**
    * Destroy unit's shape in DOM
-   *-------------------------------------------------------*/
+   *********************************************************/
   destroy() {
     this.shape.parentNode.removeChild(this.shape);
   } // destroy
@@ -426,14 +443,14 @@ class Bullet {
   static shapeSize = 3; // shape's size
   static shapeColor = '#FFFFFF'; // shape's color (white)
 
-  /*-------------------------------------------------------
+  /**
    * Constructor
    * @param x x center coordinate in pixels
    * @param y y center coordinate in pixels
    * @param target bullet's target
    * @param speed pixels per second
    * @param damage damage dealt to attacking units in HP (20)
-   *-------------------------------------------------------*/
+   *********************************************************/
   constructor(x: number, y: number, target: Attacker, speed: number = 100, damage: number = 20) {
     this.id = 'bullet.' + Bullet.ID++;
     this.state = 'alive';
@@ -444,9 +461,9 @@ class Bullet {
     this.distTg = distance(this.position, this.target.position);
   } // constructor
 
-  /*-------------------------------------------------------
+  /**
    * Move bullet within a timeframe
-   *-------------------------------------------------------*/
+   *********************************************************/
   move() {
     // target reached
     if (this.distTg - this.speed <= 0) {
@@ -465,9 +482,9 @@ class Bullet {
     this.distTg = distance - this.speed;
   } // move
 
-  /*-------------------------------------------------------
+  /**
    * Draw bullet's shape in DOM
-   *-------------------------------------------------------*/
+   *********************************************************/
   draw(): Element {
     this.shape = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
     this.shape.setAttribute('class', 'bullet');
@@ -479,9 +496,9 @@ class Bullet {
     return this.shape;
   } // draw
 
-  /*-------------------------------------------------------
+  /**
    * Update bullet within a timeframe
-   *-------------------------------------------------------*/
+   *********************************************************/
   update() {
     if (this.state === 'alive') {
       this.move();
@@ -490,9 +507,9 @@ class Bullet {
     }
   } // update
 
-  /*-------------------------------------------------------
+  /**
    * Destroy bullet's shape in DOM
-   *-------------------------------------------------------*/
+   *********************************************************/
   destroy() {
     this.shape.parentNode.removeChild(this.shape);
   } // destroy
@@ -500,19 +517,21 @@ class Bullet {
 
 /********************************************************
  * Game
+ * <br/>All members of this class are static.
+ * <br/>This class should NOT be instanciated.
  *********************************************************/
 class Game {
-  static fps = 50;
-  static viewportID = 'viewport';
-  static viewport: Element;
-  static level: Level;
-  static atks: Attacker[] = [];
-  static defs: Defender[] = [];
-  static bullets: Bullet[] = [];
+  static fps = 50; // Frame per second
+  static viewportID = 'viewport'; // viewport ID defined in HTML document
+  static viewport: Element; // viewport in DOM
+  static level: Level; // level
+  static atks: Attacker[] = []; // attacking units
+  static defs: Defender[] = []; // defending units
+  static bullets: Bullet[] = []; // bullets
 
-  /*-------------------------------------------------------
+  /**
    * Initialize game
-   *-------------------------------------------------------*/
+   *********************************************************/
   static init() {
     Game.level = new Level(
       [
@@ -537,17 +556,17 @@ class Game {
         [0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
         [0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
       ],
-      [{ x: -1, y: 1 }, { x: 20, y: 1 }],
+      [{ col: -1, line: 1 }, { col: 20, line: 1 }],
       20, 13);
     Game.atks.push(new Attacker(Game.level.path));
-    Game.defs.push(new Defender(10 * Tile.shapeSize, 2 * Tile.shapeSize));
+    Game.defs.push(new Defender(10, 2));
 
     Game.draw();
   } // init
 
-  /*-------------------------------------------------------
+  /**
    * Draw all game's shapes
-   *-------------------------------------------------------*/
+   *********************************************************/
   static draw() {
     Game.viewport = document.getElementById(Game.viewportID);
     Game.viewport.appendChild(Game.level.draw());
@@ -563,9 +582,9 @@ class Game {
     } // for i
   } // draw
 
-  /*-------------------------------------------------------
+  /**
    * Start game and update periodically
-   *-------------------------------------------------------*/
+   *********************************************************/
   static start() {
     setTimeout(() => {
       requestAnimationFrame(() => {
@@ -591,6 +610,10 @@ class Game {
 } // Game
 
 window.onload = () => {
-  Game.init();
-  Game.start();
+  if (!DEBUG) {
+    Game.init();
+    Game.start();
+  }
 }
+
+var DEBUG = false;
