@@ -1,7 +1,12 @@
 // Concepts
-// * User Interaction
-//   * Mouse over tile
-//   * Add defending unit
+// * Manually improved layout
+// * Waves of attacking units
+//   * number of attacking units
+//   * delay between attacking units of a same wave
+//   * delay between two waves
+// TODO: Aim farest attacking unit within range
+// TODO: Hitbox
+// TODO: HUD/Status: Lives, Points
 /********************************************************
  * Compute Euclidian distance between two 2D-points
  * @param p1 First point
@@ -291,7 +296,7 @@ var Defender = (function () {
         for (var i = 0; i < Game.atks.length; i++) {
             var atk = Game.atks[i];
             var dist = distance(this.position, atk.position);
-            if (dist < minDist) {
+            if (dist < minDist && atk.state === 'alive') {
                 target = atk;
                 minDist = dist;
             }
@@ -442,9 +447,20 @@ var Bullet = (function () {
     }; // destroy
     Bullet.ID = 0;
     Bullet.shapeSize = 3; // shape's size
-    Bullet.shapeColor = '#FFFFFF'; // shape's color (white)
+    Bullet.shapeColor = '#FFFF00'; // shape's color (yellow)
     return Bullet;
 })(); // Bullet
+/********************************************************
+ * Wave of attacking units
+ *********************************************************/
+var Wave = (function () {
+    function Wave() {
+    }
+    Wave.atks = 5; // number of attacking unit per wave
+    Wave.delayIntra = 0.75; // delay in seconds between two attacking unit in a same wave
+    Wave.delayInter = 10; // delay in seconds between two waves
+    return Wave;
+})(); // Wave
 /********************************************************
  * Game
  * <br/>All members of this class are static.
@@ -459,27 +475,41 @@ var Game = (function () {
     Game.init = function () {
         Game.level = new Level([
             [0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-            [0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-            [0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-            [0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-            [0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-            [0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-            [0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-            [0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-            [0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-            [0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-            [0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-            [0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-            [0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-            [0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-            [0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-            [0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-            [0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-            [0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-            [0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-            [0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
-        ], [{ col: -1, ln: 1 }, { col: 20, ln: 1 }], 20, 13);
-        Game.atks.push(new Attacker(Game.level.path));
+            [0, 1, 0, 0, 1, 1, 1, 1, 0, 0, 1, 1, 1],
+            [0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0],
+            [0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0],
+            [0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0],
+            [0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0],
+            [0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0],
+            [0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0],
+            [0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0],
+            [0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0],
+            [0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0],
+            [0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0],
+            [0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0],
+            [0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0],
+            [0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0],
+            [0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0],
+            [0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0],
+            [0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0],
+            [0, 1, 1, 1, 1, 0, 0, 1, 1, 1, 1, 0, 0],
+            [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+        ], [
+            { col: -1, ln: 1 },
+            { col: 18, ln: 1 },
+            { col: 18, ln: 4 },
+            { col: 1, ln: 4 },
+            { col: 1, ln: 7 },
+            { col: 18, ln: 7 },
+            { col: 18, ln: 10 },
+            { col: 1, ln: 10 },
+            { col: 1, ln: 13 }
+        ], 20, 13);
+        Wave.delayIntra *= Game.fps;
+        Wave.delayInter *= Game.fps;
+        Game.wAtks = 0;
+        Game.wDelayIntra = 0;
+        Game.wDelayInter = 0;
         Game.draw();
     }; // init
     /**
@@ -488,14 +518,6 @@ var Game = (function () {
     Game.draw = function () {
         Game.viewport = document.getElementById(Game.viewportID);
         Game.level.draw();
-        for (var i = 0; i < Game.atks.length; i++) {
-            var atk = Game.atks[i];
-            atk.draw();
-        }
-        for (var i = 0; i < Game.defs.length; i++) {
-            var def = Game.defs[i];
-            def.draw();
-        }
     }; // draw
     /**
      * Start game and update periodically
@@ -503,6 +525,27 @@ var Game = (function () {
     Game.start = function () {
         setTimeout(function () {
             requestAnimationFrame(function () {
+                // Update timer between waves
+                if (Game.wDelayInter <= 0) {
+                    Game.wDelayInter = Wave.delayInter;
+                    Game.wAtks = Wave.atks;
+                }
+                else {
+                    Game.wDelayInter -= 1;
+                }
+                // Update timer between two attacking units within a wave
+                if (Game.wDelayIntra <= 0) {
+                    Game.wDelayIntra = Wave.delayIntra;
+                    if (Game.wAtks > 0) {
+                        var attacker = new Attacker(Game.level.path);
+                        attacker.draw();
+                        Game.atks.push(attacker);
+                        Game.wAtks--;
+                    }
+                }
+                else {
+                    Game.wDelayIntra -= 1;
+                }
                 for (var i = 0; i < Game.atks.length; i++) {
                     var atk = Game.atks[i];
                     atk.update();
@@ -517,9 +560,9 @@ var Game = (function () {
                 }
                 Game.start();
             });
-        }, 1000 / Game.fps); // update every 20 ms, 50 FPS
+        }, 1000 / Game.fps); // update every 20 ms, Game.fps == 50 FPS
     }; // start
-    Game.fps = 50; // Frame per second
+    Game.fps = 50; // frame per second
     Game.viewportID = 'viewport'; // viewport ID defined in HTML document
     Game.atks = []; // attacking units
     Game.defs = []; // defending units

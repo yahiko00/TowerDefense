@@ -1,7 +1,12 @@
 ﻿// Concepts
-// * User Interaction
-//   * Mouse over tile
-//   * Add defending unit
+// * Manually improved layout
+// * Waves of attacking units
+//   * number of attacking units
+//   * delay between attacking units of a same wave
+//   * delay between two waves
+// TODO: Aim farest attacking unit within range
+// TODO: Hitbox
+// TODO: HUD/Status: Lives, Points
 
 /********************************************************
  * 2D Point
@@ -381,11 +386,11 @@ class Defender implements Shape {
     var minDist = Number.POSITIVE_INFINITY;
     var target: Attacker;
 
-    // Get the nearest attacker
+    // Get the nearest alive attacker
     for (var i = 0; i < Game.atks.length; i++) {
       var atk = Game.atks[i];
       var dist = distance(this.position, atk.position);
-      if (dist < minDist) {
+      if (dist < minDist && atk.state === 'alive') {
         target = atk;
         minDist = dist;
       }
@@ -479,7 +484,7 @@ class Bullet {
 
   shape: Element; // DOM shape
   static shapeSize = 3; // shape's size
-  static shapeColor = '#FFFFFF'; // shape's color (white)
+  static shapeColor = '#FFFF00'; // shape's color (yellow)
 
   /**
    * Constructor
@@ -560,18 +565,31 @@ class Bullet {
 } // Bullet
 
 /********************************************************
+ * Wave of attacking units
+ *********************************************************/
+class Wave {
+  static atks = 5; // number of attacking unit per wave
+  static delayIntra = 0.75; // delay in seconds between two attacking unit in a same wave
+  static delayInter = 10; // delay in seconds between two waves
+} // Wave
+
+/********************************************************
  * Game
  * <br/>All members of this class are static.
  * <br/>This class should NOT be instanciated.
  *********************************************************/
 class Game {
-  static fps = 50; // Frame per second
+  static fps = 50; // frame per second
   static viewportID = 'viewport'; // viewport ID defined in HTML document
   static viewport: Element; // viewport in DOM
   static level: Level; // level
   static atks: Attacker[] = []; // attacking units
   static defs: Defender[] = []; // defending units
   static bullets: Bullet[] = []; // bullets
+
+  static wAtks: number; // current remaning attacking unit to produce
+  static wDelayIntra: number; // current wave intra delay
+  static wDelayInter: number; // current wave intar delay
 
   /**
    * Initialize game
@@ -580,29 +598,38 @@ class Game {
     Game.level = new Level(
       [
         [0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-        [0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-        [0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-        [0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-        [0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-        [0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-        [0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-        [0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-        [0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-        [0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-        [0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-        [0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-        [0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-        [0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-        [0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-        [0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-        [0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-        [0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-        [0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-        [0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+        [0, 1, 0, 0, 1, 1, 1, 1, 0, 0, 1, 1, 1],
+        [0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0],
+        [0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0],
+        [0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0],
+        [0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0],
+        [0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0],
+        [0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0],
+        [0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0],
+        [0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0],
+        [0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0],
+        [0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0],
+        [0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0],
+        [0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0],
+        [0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0],
+        [0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0],
+        [0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0],
+        [0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0],
+        [0, 1, 1, 1, 1, 0, 0, 1, 1, 1, 1, 0, 0],
+        [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
       ],
-      [{ col: -1, ln: 1 }, { col: 20, ln: 1 }],
+      [
+        { col: -1, ln: 1 }, { col: 18, ln: 1 }, { col: 18, ln: 4 }, { col: 1, ln: 4 },
+        { col: 1, ln: 7 }, { col: 18, ln: 7 }, { col: 18, ln: 10 }, { col: 1, ln: 10 },
+        { col: 1, ln: 13 }
+      ],
       20, 13);
-    Game.atks.push(new Attacker(Game.level.path));
+
+    Wave.delayIntra *= Game.fps;
+    Wave.delayInter *= Game.fps;
+    Game.wAtks = 0;
+    Game.wDelayIntra = 0;
+    Game.wDelayInter = 0;
 
     Game.draw();
   } // init
@@ -613,16 +640,6 @@ class Game {
   static draw() {
     Game.viewport = document.getElementById(Game.viewportID);
     Game.level.draw();
-
-    for (var i = 0; i < Game.atks.length; i++) {
-      var atk = Game.atks[i];
-      atk.draw();
-    } // for i
-
-    for (var i = 0; i < Game.defs.length; i++) {
-      var def = Game.defs[i];
-      def.draw();
-    } // for i
   } // draw
 
   /**
@@ -631,16 +648,42 @@ class Game {
   static start() {
     setTimeout(() => {
       requestAnimationFrame(() => {
+        // Update timer between waves
+        if (Game.wDelayInter <= 0) {
+          Game.wDelayInter = Wave.delayInter;
+          Game.wAtks = Wave.atks;
+        }
+        else {
+          Game.wDelayInter -= 1;
+        }
+
+        // Update timer between two attacking units within a wave
+        if (Game.wDelayIntra <= 0) {
+          Game.wDelayIntra = Wave.delayIntra;
+          if (Game.wAtks > 0) {
+            var attacker = new Attacker(Game.level.path);
+            attacker.draw();
+            Game.atks.push(attacker);
+            Game.wAtks--;
+          }
+        }
+        else {
+          Game.wDelayIntra -= 1;
+        }
+
+        // Update attacking units
         for (var i = 0; i < Game.atks.length; i++) {
           var atk = Game.atks[i];
           atk.update();
         } // for i
 
+        // Update defending units
         for (var i = 0; i < Game.defs.length; i++) {
           var def = Game.defs[i];
           def.update();
         } // for i
 
+        // Update bullets
         for (var i = 0; i < Game.bullets.length; i++) {
           var bullet = Game.bullets[i];
           bullet.update();
@@ -648,7 +691,7 @@ class Game {
 
         Game.start();
       });
-    }, 1000 / Game.fps); // update every 20 ms, 50 FPS
+    }, 1000 / Game.fps); // update every 20 ms, Game.fps == 50 FPS
   } // start
 } // Game
 
