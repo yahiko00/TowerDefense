@@ -1,6 +1,6 @@
 ﻿body
 {
-    font-family: 'Segoe UI', sans-serif
+    font-family: 'Segoe UI', sans-serif;
 }
 
 .tileWallEmpty {
@@ -22,6 +22,18 @@
 
 .attacker {
     fill: #FF3333; /* lightred */
+}
+
+.attackerHealthy {
+    fill: #FF3333; /* lightred */
+}
+
+.attackerHurt {
+    fill: #FF7070; /* lightred */
+}
+
+.attackerCritical {
+    fill: #FFADAD; /* lightred */
 }
 
 .defender {

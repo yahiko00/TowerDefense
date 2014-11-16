@@ -1,15 +1,5 @@
 ﻿// Concepts
-// * Manually improved layout
-// * Waves of attacking units
-//   * number of attacking units
-//   * delay between attacking units of a same wave
-//   * delay between two waves
-// * Lock attacking unit within range
-// * Remove dead and passed attacking units from memory (GC)
-// * Remove dead bullets from memory (GC)
-// * Hitbox
-// * HUD/Status: Lives, Points
-// * CSS
+// * Game State
 
 /********************************************************
  * 2D Point
@@ -189,6 +179,7 @@ class Level implements Shape {
     this.shape.setAttribute('width', Level.shapeWidth.toString());
     this.shape.setAttribute('height', Level.shapeHeight.toString());
 
+
     for (var i = 0; i < this.tiles.length; i++) {
       var tile = this.tiles[i];
       tile.draw();
@@ -221,6 +212,7 @@ class Attacker implements Shape {
 
   position: Point; // center
   path: Cell[]; // waypoints
+  hpMax: number // max hit points
   hp: number; // hit points
   speed: number; // pixels per frame
   hitboxRadius: number; // hitbox's radius
@@ -243,6 +235,7 @@ class Attacker implements Shape {
     this.state = 'alive';
     this.position = cellCenter(path[0]);
     this.path = path;
+    this.hpMax = hp;
     this.hp = hp;
     this.speed = speed / Game.fps; // conversion
     this.hitboxRadius = hitboxRadius;
@@ -294,7 +287,17 @@ class Attacker implements Shape {
    *********************************************************/
   hit(damage: number) {
     this.hp -= damage;
-    if (this.hp <= 0) {
+    var ratio = this.hp / this.hpMax;
+    if (ratio >= 0.6) {
+      this.shape.setAttribute('class', 'attackerHealthy');
+    }
+    else if (ratio >= 0.3) {
+      this.shape.setAttribute('class', 'attackerHurt');
+    }
+    else if (ratio > 0) {
+      this.shape.setAttribute('class', 'attackerCritical');
+    }
+    else {
       this.state = 'dead';
       this.destroy();
       Game.points += 1;
