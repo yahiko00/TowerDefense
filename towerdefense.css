@@ -3,14 +3,46 @@
     font-family: 'Segoe UI', sans-serif
 }
 
-span {
-    font-style: italic
+.tileWallEmpty {
+    fill: #7A7A7A; /* lightgray */
 }
 
-#viewport {
-    background-color: black;
+.tileWallEmpty:hover {
+    stroke-width: 1;
+    stroke: #00FF00; /* green */
 }
 
-.layer {
-    position: absolute;
+.tileWallOccupied {
+    fill: #7A7A7A; /* lightgray */
+}
+
+.tilePath {
+    fill: #313131; /* darkgray */
+}
+
+.attacker {
+    fill: #FF3333; /* lightred */
+}
+
+.defender {
+    fill: #0047B2; /* blue */
+}
+
+.bullet {
+    fill: #FFFF00; /* yellow */
+}
+
+.lives {
+    float: left;
+    width: 33%;
+}
+
+.points {
+    float: left;
+    width: 33%;
+}
+
+.nextWave {
+    float: left;
+    width: 33%;
 }

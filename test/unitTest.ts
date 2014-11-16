@@ -3,34 +3,6 @@
 
 var DEBUG = true;
 
-Game.viewport = document.getElementById('viewport');
-Game.level = new Level(
-  [
-    [0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-    [0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-    [0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-    [0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-    [0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-    [0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-    [0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-    [0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-    [0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-    [0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-    [0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-    [0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-    [0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-    [0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-    [0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-    [0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-    [0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-    [0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-    [0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-    [0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
-  ],
-  [{ col: -1, ln: 1 }, { col: 20, ln: 1 }],
-  20, 13);
-Game.level.draw();
-
 QUnit.test('Attacker.constructor', function (assert) {
   var path = [{ col: -1, ln: 1 }, { col: 10, ln: 1 }];
   var att = new Attacker(path, 44);
@@ -51,7 +23,7 @@ QUnit.test('Attacker.constructor', function (assert) {
     , 'Passed!');
 });
 
-QUnit.test('Attacker.move1', function (assert) {
+QUnit.test('Attacker.moveBeforeNextWaypoint', function (assert) {
   var path = [{ col: -1, ln: 1 }, { col: 10, ln: 1 }];
   var att = new Attacker(path, 44, 250);
   var begin = cellCenter(path[0]);
@@ -68,7 +40,7 @@ QUnit.test('Attacker.move1', function (assert) {
     , 'Passed!');
 });
 
-QUnit.test('Attacker.move2', function (assert) {
+QUnit.test('Attacker.moveAfterNextWaypoint', function (assert) {
   var path = [{ col: 2, ln: 1 }, { col: 3, ln: 1 }, { col: 10, ln: 1 }];
   var att = new Attacker(path, 44, 2500);
   var p0 = cellCenter(path[0]);
@@ -178,11 +150,11 @@ QUnit.test('Defender.shoot', function (assert) {
     bullet.state === 'alive' &&
     bullet.speed === 2 &&
     bullet.damage === 20 &&
-    bullet.distTg === distance(bullet.position, att.position)
+    bullet.distTg === distance(bullet.position, att.position) - att.hitboxRadius
     , 'Passed!');
 });
 
-QUnit.test('Defender.aimOk1', function (assert) {
+QUnit.test('Defender.aimNewTargetOk', function (assert) {
   var path = [{ col: 5, ln: 1 }, { col: 10, ln: 1 }];
   var att = new Attacker(path, 100, 50);
   var def = new Defender(5, 2, 20, 50, 1);
@@ -197,6 +169,7 @@ QUnit.test('Defender.aimOk1', function (assert) {
 
   assert.ok(
     def.state === 'cooldown' &&
+    def.target.id === att.id &&
     bullet &&
     bullet.position.x === def.position.x &&
     bullet.position.y === def.position.y &&
@@ -205,7 +178,135 @@ QUnit.test('Defender.aimOk1', function (assert) {
     bullet.state === 'alive' &&
     bullet.speed === 2 &&
     bullet.damage === 20 &&
-    bullet.distTg === distance(bullet.position, att.position)
+    bullet.distTg === distance(bullet.position, att.position) - att.hitboxRadius
+    , 'Passed!');
+});
+
+QUnit.test('Defender.aimNewTargetOk-OldTargetPassed', function (assert) {
+  var path = [{ col: 5, ln: 1 }, { col: 10, ln: 1 }];
+  var attOk = new Attacker(path, 100, 50);
+  var attKo = new Attacker(path, 100, 50);
+  var def = new Defender(5, 2, 20, 50, 1);
+  attKo.position = cellCenter(path[1]);
+  attKo.state = 'passed';
+  def.target = attKo;
+  def.draw();
+  Game.bullets = [];
+  Game.atks = [attKo, attOk];
+  def.aim();
+  var bullet = Game.bullets[0];
+
+  Game.level.shape.removeChild(def.shape);
+  Game.level.shape.removeChild(bullet.shape);
+
+  assert.ok(
+    def.state === 'cooldown' &&
+    def.target.id === attOk.id &&
+    bullet &&
+    bullet.position.x === def.position.x &&
+    bullet.position.y === def.position.y &&
+    bullet.target &&
+    bullet.target.id === attOk.id &&
+    bullet.state === 'alive' &&
+    bullet.speed === 2 &&
+    bullet.damage === 20 &&
+    bullet.distTg === distance(bullet.position, attOk.position) - attOk.hitboxRadius
+    , 'Passed!');
+});
+
+QUnit.test('Defender.aimNewTargetOk-OldTargetDead', function (assert) {
+  var path = [{ col: 5, ln: 1 }, { col: 10, ln: 1 }];
+  var attOk = new Attacker(path, 100, 50);
+  var attKo = new Attacker(path, 100, 50);
+  var def = new Defender(5, 2, 20, 50, 1);
+  attKo.position = cellCenter(path[1]);
+  attKo.state = 'dead';
+  def.target = attKo;
+  def.draw();
+  Game.bullets = [];
+  Game.atks = [attKo, attOk];
+  def.aim();
+  var bullet = Game.bullets[0];
+
+  Game.level.shape.removeChild(def.shape);
+  Game.level.shape.removeChild(bullet.shape);
+
+  assert.ok(
+    def.state === 'cooldown' &&
+    def.target.id === attOk.id &&
+    bullet &&
+    bullet.position.x === def.position.x &&
+    bullet.position.y === def.position.y &&
+    bullet.target &&
+    bullet.target.id === attOk.id &&
+    bullet.state === 'alive' &&
+    bullet.speed === 2 &&
+    bullet.damage === 20 &&
+    bullet.distTg === distance(bullet.position, attOk.position) - attOk.hitboxRadius
+    , 'Passed!');
+});
+
+QUnit.test('Defender.aimNewTargetOk-OldTargetAliveOutOfRange', function (assert) {
+  var path = [{ col: 5, ln: 1 }, { col: 10, ln: 1 }];
+  var attOk = new Attacker(path, 100, 50);
+  var attKo = new Attacker(path, 100, 50);
+  var def = new Defender(5, 2, 20, 50, 1);
+  attKo.position = cellCenter(path[1]);
+  attKo.state = 'dead';
+  def.target = attKo;
+  def.draw();
+  Game.bullets = [];
+  Game.atks = [attKo, attOk];
+  def.aim();
+  var bullet = Game.bullets[0];
+
+  Game.level.shape.removeChild(def.shape);
+  Game.level.shape.removeChild(bullet.shape);
+
+  assert.ok(
+    def.state === 'cooldown' &&
+    def.target.id === attOk.id &&
+    bullet &&
+    bullet.position.x === def.position.x &&
+    bullet.position.y === def.position.y &&
+    bullet.target &&
+    bullet.target.id === attOk.id &&
+    bullet.state === 'alive' &&
+    bullet.speed === 2 &&
+    bullet.damage === 20 &&
+    bullet.distTg === distance(bullet.position, attOk.position) - attOk.hitboxRadius
+    , 'Passed!');
+});
+
+QUnit.test('Defender.aimOldTargetAliveWithinRange', function (assert) {
+  var path = [{ col: 4.9, ln: 1 }, { col: 5.1, ln: 1 }];
+  var attOk = new Attacker(path, 100, 50);
+  var attKo = new Attacker(path, 100, 50);
+  var def = new Defender(5, 2, 20, 50, 1);
+  attKo.position = cellCenter(path[1]);
+  attKo.state = 'dead';
+  def.target = attOk;
+  def.draw();
+  Game.bullets = [];
+  Game.atks = [attKo, attOk];
+  def.aim();
+  var bullet = Game.bullets[0];
+
+  Game.level.shape.removeChild(def.shape);
+  Game.level.shape.removeChild(bullet.shape);
+
+  assert.ok(
+    def.state === 'cooldown' &&
+    def.target.id === attOk.id &&
+    bullet &&
+    bullet.position.x === def.position.x &&
+    bullet.position.y === def.position.y &&
+    bullet.target &&
+    bullet.target.id === attOk.id &&
+    bullet.state === 'alive' &&
+    bullet.speed === 2 &&
+    bullet.damage === 20 &&
+    bullet.distTg === distance(bullet.position, attOk.position) - attOk.hitboxRadius
     , 'Passed!');
 });
 
@@ -222,7 +323,7 @@ QUnit.test('Bullet.constructor', function (assert) {
     bullet.target.id === att.id &&
     bullet.speed === 100 / Game.fps &&
     bullet.damage === 20 &&
-    bullet.distTg === distance(bullet.position, att.position) &&
+    bullet.distTg === distance(bullet.position, att.position) - att.hitboxRadius &&
     bullet.state === 'alive'
     , 'Passed!');
 });
@@ -238,7 +339,7 @@ QUnit.test('Bullet.move', function (assert) {
     bullet.position.x === begin.x &&
     bullet.position.y === 2.5 * Tile.shapeSize - bullet.speed &&
     bullet.speed === 100 / Game.fps &&
-    bullet.distTg === distance(att.position, bullet.position) &&
+    bullet.distTg === distance(bullet.position, att.position) - att.hitboxRadius &&
     bullet.state === 'alive' &&
     att.hp === 100
     , 'Passed!');
@@ -287,4 +388,4 @@ Array.prototype.equals = function (array) {
     }
   }
   return true;
-}   
+}

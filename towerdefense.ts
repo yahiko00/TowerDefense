@@ -4,9 +4,12 @@
 //   * number of attacking units
 //   * delay between attacking units of a same wave
 //   * delay between two waves
-// TODO: Aim farest attacking unit within range
-// TODO: Hitbox
-// TODO: HUD/Status: Lives, Points
+// * Lock attacking unit within range
+// * Remove dead and passed attacking units from memory (GC)
+// * Remove dead bullets from memory (GC)
+// * Hitbox
+// * HUD/Status: Lives, Points
+// * CSS
 
 /********************************************************
  * 2D Point
@@ -77,9 +80,6 @@ class Tile implements Shape {
 
   shape: Element; // DOM shape
   static shapeSize = 40; // shape's size
-  static shapeColorWall = '#7A7A7A'; // wall's color (lightgray)
-  static shapeColorPath = '#313131'; // path's color (darkgray)
-  static shapeColorOutline = '#00FF00' // outline's color (green)
 
   /**
    * Constructor
@@ -106,33 +106,23 @@ class Tile implements Shape {
     this.shape.setAttribute('y', this.position.y.toString());
     this.shape.setAttribute('width', Tile.shapeSize.toString());
     this.shape.setAttribute('height', Tile.shapeSize.toString());
-    this.shape.setAttribute('stroke', Tile.shapeColorOutline);
-    this.shape.setAttribute('stroke-width', '0');
     switch (this.type) {
       case 0: // wall
-        this.shape.setAttribute('class', 'tileWall');
-        this.shape.setAttribute('fill', Tile.shapeColorWall);
+        this.shape.setAttribute('class', 'tileWallEmpty');
         this.shape.addEventListener('click', () => {
-          if (this.empty) {
+          if (this.empty && Game.points >= Game.defCost) {
             // Add a defending unit
             var defender = new Defender(this.col, this.ln);
             Game.defs.push(defender);
             defender.draw();
             this.empty = false;
+            this.shape.setAttribute('class', 'tileWallOccupied');
+            Game.points -= Game.defCost;
           }
-        });
-        this.shape.addEventListener('mouseover', () => {
-          if (this.empty) {
-            this.shape.setAttribute('stroke-width', '1');
-          }
-        });
-        this.shape.addEventListener('mouseout', () => {
-          this.shape.setAttribute('stroke-width', '0');
         });
         break;
       case 1: // path
         this.shape.setAttribute('class', 'tilePath');
-        this.shape.setAttribute('fill', Tile.shapeColorPath);
         break;
       default:
         break;
@@ -240,7 +230,6 @@ class Attacker implements Shape {
 
   shape: Element; // DOM shape
   static shapeSize = 20; // shape's size
-  static shapeColor = '#FF3333'; // shape's color (lightred)
 
   /**
    * Constructor
@@ -283,6 +272,7 @@ class Attacker implements Shape {
         this.distWp = 0;
         this.state = 'passed';
         this.destroy();
+        Game.lives -= 1;
         return;
       }
 
@@ -307,6 +297,7 @@ class Attacker implements Shape {
     if (this.hp <= 0) {
       this.state = 'dead';
       this.destroy();
+      Game.points += 1;
     }
   } // hit
 
@@ -320,7 +311,6 @@ class Attacker implements Shape {
     this.shape.setAttribute('cx', this.position.x.toString());
     this.shape.setAttribute('cy', this.position.y.toString());
     this.shape.setAttribute('r', (Attacker.shapeSize / 2).toString());
-    this.shape.setAttribute('fill', Attacker.shapeColor);
     Game.level.shape.appendChild(this.shape);
   } // draw
 
@@ -340,6 +330,15 @@ class Attacker implements Shape {
    *********************************************************/
   destroy() {
     this.shape.parentNode.removeChild(this.shape);
+
+    // Remove attacking unit from memory
+    for (var i = 0; i < Game.atks.length; i++) {
+      var atk = Game.atks[i];
+      if (atk.id === this.id) {
+        Game.atks.splice(i, 1);
+        break;
+      }
+    } // for i
   } // destroy
 } // Attacker
 
@@ -356,10 +355,10 @@ class Defender implements Shape {
   range: number; // shooting range in pixels
   rate: number; // number of shoots per 100 frames
   delay: number; // number of frames before another shot
+  target: Attacker; // current target
 
   shape: Element; // DOM shape
   static shapeSize = Tile.shapeSize * 0.75; // shape's size
-  static shapeColor = '#0047B2'; // shape's color (blue)
 
   /**
    * Constructor
@@ -383,22 +382,37 @@ class Defender implements Shape {
    * Aim at a target among all possible attacking units
    *********************************************************/
   aim() {
-    var minDist = Number.POSITIVE_INFINITY;
-    var target: Attacker;
+    var maxDist = Number.POSITIVE_INFINITY;
 
-    // Get the nearest alive attacker
-    for (var i = 0; i < Game.atks.length; i++) {
-      var atk = Game.atks[i];
-      var dist = distance(this.position, atk.position);
-      if (dist < minDist && atk.state === 'alive') {
-        target = atk;
-        minDist = dist;
+    // Current target is alive and
+    // within range: fire!
+    if (
+      this.target &&
+      this.target.state === 'alive' &&
+      distance(this.position, this.target.position) <= this.range) {
+
+      return this.shoot(this.target);
+    }
+    // Get the nearest alive attacker within range
+    // if there is no current target or
+    // if the current target is not alive or
+    // if the current target is alive but out of range
+    else {
+      this.target = null;
+
+      for (var i = 0; i < Game.atks.length; i++) {
+        var atk = Game.atks[i];
+        var dist = distance(this.position, atk.position);
+        if (dist <= maxDist && atk.state === 'alive' && dist <= this.range) {
+          this.target = atk;
+          maxDist = dist;
+        }
+      } // for i
+
+      // A new target within range has been found: fire!
+      if (this.target) {
+        return this.shoot(this.target);
       }
-    } // for i
-
-    // Attacker is within range: fire!
-    if (minDist <= this.range) {
-      return this.shoot(target);
     }
 
     return null;
@@ -440,7 +454,6 @@ class Defender implements Shape {
     this.shape.setAttribute('y', (this.position.y - Defender.shapeSize / 2).toString());
     this.shape.setAttribute('width', Defender.shapeSize.toString());
     this.shape.setAttribute('height', Defender.shapeSize.toString());
-    this.shape.setAttribute('fill', Defender.shapeColor);
     Game.level.shape.appendChild(this.shape);
   } // draw
 
@@ -480,11 +493,10 @@ class Bullet {
   target: Attacker; // bullet's target
   speed: number; // pixels per frame
   damage: number; // damage per hit
-  distTg: number; // distance to target
+  distTg: number; // distance to target's hitbox
 
   shape: Element; // DOM shape
   static shapeSize = 3; // shape's size
-  static shapeColor = '#FFFF00'; // shape's color (yellow)
 
   /**
    * Constructor
@@ -501,7 +513,7 @@ class Bullet {
     this.target = target;
     this.speed = speed / Game.fps;
     this.damage = damage;
-    this.distTg = distance(this.position, this.target.position);
+    this.distTg = distance(this.position, this.target.position) - this.target.hitboxRadius;
   } // constructor
 
   /**
@@ -528,7 +540,7 @@ class Bullet {
     var ratio = this.speed / distance;
     this.position.x += dx * ratio;
     this.position.y += dy * ratio;
-    this.distTg = distance - this.speed;
+    this.distTg = distance - this.speed - this.target.hitboxRadius;
   } // move
 
   /**
@@ -541,7 +553,6 @@ class Bullet {
     this.shape.setAttribute('cx', this.position.x.toString());
     this.shape.setAttribute('cy', this.position.y.toString());
     this.shape.setAttribute('r', Bullet.shapeSize.toString());
-    this.shape.setAttribute('fill', Bullet.shapeColor);
     Game.level.shape.appendChild(this.shape);
   } // draw
 
@@ -561,6 +572,15 @@ class Bullet {
    *********************************************************/
   destroy() {
     this.shape.parentNode.removeChild(this.shape);
+
+    // Remove bullet from memory
+    for (var i = 0; i < Game.atks.length; i++) {
+      var atk = Game.atks[i];
+      if (atk.id === this.id) {
+        Game.atks.splice(i, 1);
+        break;
+      }
+    } // for i
   } // destroy
 } // Bullet
 
@@ -574,18 +594,66 @@ class Wave {
 } // Wave
 
 /********************************************************
+ * Status bar display management
+ *********************************************************/
+class Statusbar {
+  static livesDom: HTMLElement;
+  static pointsDom: HTMLElement;
+  static nextWaveDom: HTMLElement;
+
+  /**
+   * Draw level's shape in DOM
+   *********************************************************/
+  static draw() {
+    Game.statusbar = document.createElement('div');
+    Game.statusbar.setAttribute('width', Level.shapeWidth.toString());
+    Game.statusbar.setAttribute('height', Level.shapeHeight.toString());
+    Game.container.appendChild(Game.statusbar);
+
+    Statusbar.livesDom = document.createElement('span');
+    Statusbar.livesDom.setAttribute('class', 'lives');
+    Statusbar.livesDom.innerHTML = 'Lives: ' + Game.lives.toString();
+    Game.statusbar.appendChild(Statusbar.livesDom);
+
+    Statusbar.pointsDom = document.createElement('span');
+    Statusbar.pointsDom.setAttribute('class', 'points');
+    Statusbar.pointsDom.innerHTML = 'Points: ' + Game.points.toString();
+    Game.statusbar.appendChild(Statusbar.pointsDom);
+
+    Statusbar.nextWaveDom = document.createElement('span');
+    Statusbar.nextWaveDom.setAttribute('class', 'nextWave');
+    Statusbar.nextWaveDom.innerHTML = 'Next Wave: ' + Math.round(Game.wDelayInter / Game.fps).toString();
+    Game.statusbar.appendChild(Statusbar.nextWaveDom);
+  } // draw
+
+  /**
+   * Update level within a timeframe
+   *********************************************************/
+  static update() {
+    Statusbar.livesDom.innerHTML = 'Lives: ' + Game.lives.toString();
+    Statusbar.pointsDom.innerHTML = 'Points: ' + Game.points.toString();
+    Statusbar.nextWaveDom.innerHTML = 'Next Wave: ' + Math.round(Game.wDelayInter / Game.fps).toString();
+  } // update
+} // Statusbar
+
+/********************************************************
  * Game
  * <br/>All members of this class are static.
  * <br/>This class should NOT be instanciated.
  *********************************************************/
 class Game {
   static fps = 50; // frame per second
-  static viewportID = 'viewport'; // viewport ID defined in HTML document
-  static viewport: Element; // viewport in DOM
+  static containerID = 'game'; // container ID defined in HTML document
+  static container: Element; // container in DOM
+  static viewport: Element; // viewport in DOM containing all elements of a level
+  static statusbar: Element; // status bar in DOM
   static level: Level; // level
   static atks: Attacker[] = []; // attacking units
   static defs: Defender[] = []; // defending units
   static bullets: Bullet[] = []; // bullets
+  static lives: number; // lives remaining
+  static points: number; // points remaining
+  static defCost = 3; // cost in points of a defending unit
 
   static wAtks: number; // current remaning attacking unit to produce
   static wDelayIntra: number; // current wave intra delay
@@ -631,6 +699,9 @@ class Game {
     Game.wDelayIntra = 0;
     Game.wDelayInter = 0;
 
+    Game.lives = 5;
+    Game.points = 12;
+
     Game.draw();
   } // init
 
@@ -638,8 +709,15 @@ class Game {
    * Draw all game's shapes
    *********************************************************/
   static draw() {
-    Game.viewport = document.getElementById(Game.viewportID);
+    Game.container = document.getElementById(Game.containerID);
+
+    // Create viewport
+    Game.viewport = document.createElement('div');
+    Game.container.appendChild(Game.viewport);
     Game.level.draw();
+
+    // Create status bar
+    Statusbar.draw();
   } // draw
 
   /**
@@ -689,6 +767,9 @@ class Game {
           bullet.update();
         } // for i
 
+        // Update status bar informations
+        Statusbar.update();
+
         Game.start();
       });
     }, 1000 / Game.fps); // update every 20 ms, Game.fps == 50 FPS
@@ -696,8 +777,8 @@ class Game {
 } // Game
 
 window.onload = () => {
+  Game.init();
   if (!DEBUG) {
-    Game.init();
     Game.start();
   }
 }

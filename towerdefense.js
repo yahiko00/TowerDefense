@@ -4,9 +4,12 @@
 //   * number of attacking units
 //   * delay between attacking units of a same wave
 //   * delay between two waves
-// TODO: Aim farest attacking unit within range
-// TODO: Hitbox
-// TODO: HUD/Status: Lives, Points
+// * Lock attacking unit within range
+// * Remove dead and passed attacking units from memory (GC)
+// * Remove dead bullets from memory (GC)
+// * Hitbox
+// * HUD/Status: Lives, Points
+// * CSS
 /********************************************************
  * Compute Euclidian distance between two 2D-points
  * @param p1 First point
@@ -60,33 +63,23 @@ var Tile = (function () {
         this.shape.setAttribute('y', this.position.y.toString());
         this.shape.setAttribute('width', Tile.shapeSize.toString());
         this.shape.setAttribute('height', Tile.shapeSize.toString());
-        this.shape.setAttribute('stroke', Tile.shapeColorOutline);
-        this.shape.setAttribute('stroke-width', '0');
         switch (this.type) {
             case 0:
-                this.shape.setAttribute('class', 'tileWall');
-                this.shape.setAttribute('fill', Tile.shapeColorWall);
+                this.shape.setAttribute('class', 'tileWallEmpty');
                 this.shape.addEventListener('click', function () {
-                    if (_this.empty) {
+                    if (_this.empty && Game.points >= Game.defCost) {
                         // Add a defending unit
                         var defender = new Defender(_this.col, _this.ln);
                         Game.defs.push(defender);
                         defender.draw();
                         _this.empty = false;
+                        _this.shape.setAttribute('class', 'tileWallOccupied');
+                        Game.points -= Game.defCost;
                     }
-                });
-                this.shape.addEventListener('mouseover', function () {
-                    if (_this.empty) {
-                        _this.shape.setAttribute('stroke-width', '1');
-                    }
-                });
-                this.shape.addEventListener('mouseout', function () {
-                    _this.shape.setAttribute('stroke-width', '0');
                 });
                 break;
             case 1:
                 this.shape.setAttribute('class', 'tilePath');
-                this.shape.setAttribute('fill', Tile.shapeColorPath);
                 break;
             default:
                 break;
@@ -106,9 +99,6 @@ var Tile = (function () {
     }; // destroy
     Tile.ID = 0;
     Tile.shapeSize = 40; // shape's size
-    Tile.shapeColorWall = '#7A7A7A'; // wall's color (lightgray)
-    Tile.shapeColorPath = '#313131'; // path's color (darkgray)
-    Tile.shapeColorOutline = '#00FF00'; // outline's color (green)
     return Tile;
 })(); // Tile
 /********************************************************
@@ -206,6 +196,7 @@ var Attacker = (function () {
                 this.distWp = 0;
                 this.state = 'passed';
                 this.destroy();
+                Game.lives -= 1;
                 return;
             }
             var pointWp = cellCenter(this.path[this.waypoint]);
@@ -227,6 +218,7 @@ var Attacker = (function () {
         if (this.hp <= 0) {
             this.state = 'dead';
             this.destroy();
+            Game.points += 1;
         }
     }; // hit
     /**
@@ -239,7 +231,6 @@ var Attacker = (function () {
         this.shape.setAttribute('cx', this.position.x.toString());
         this.shape.setAttribute('cy', this.position.y.toString());
         this.shape.setAttribute('r', (Attacker.shapeSize / 2).toString());
-        this.shape.setAttribute('fill', Attacker.shapeColor);
         Game.level.shape.appendChild(this.shape);
     }; // draw
     /**
@@ -257,10 +248,16 @@ var Attacker = (function () {
      *********************************************************/
     Attacker.prototype.destroy = function () {
         this.shape.parentNode.removeChild(this.shape);
+        for (var i = 0; i < Game.atks.length; i++) {
+            var atk = Game.atks[i];
+            if (atk.id === this.id) {
+                Game.atks.splice(i, 1);
+                break;
+            }
+        }
     }; // destroy
     Attacker.ID = 0;
     Attacker.shapeSize = 20; // shape's size
-    Attacker.shapeColor = '#FF3333'; // shape's color (lightred)
     return Attacker;
 })(); // Attacker
 /********************************************************
@@ -291,19 +288,26 @@ var Defender = (function () {
      * Aim at a target among all possible attacking units
      *********************************************************/
     Defender.prototype.aim = function () {
-        var minDist = Number.POSITIVE_INFINITY;
-        var target;
-        for (var i = 0; i < Game.atks.length; i++) {
-            var atk = Game.atks[i];
-            var dist = distance(this.position, atk.position);
-            if (dist < minDist && atk.state === 'alive') {
-                target = atk;
-                minDist = dist;
-            }
+        var maxDist = Number.POSITIVE_INFINITY;
+        // Current target is alive and
+        // within range: fire!
+        if (this.target && this.target.state === 'alive' && distance(this.position, this.target.position) <= this.range) {
+            return this.shoot(this.target);
         }
-        // Attacker is within range: fire!
-        if (minDist <= this.range) {
-            return this.shoot(target);
+        else {
+            this.target = null;
+            for (var i = 0; i < Game.atks.length; i++) {
+                var atk = Game.atks[i];
+                var dist = distance(this.position, atk.position);
+                if (dist <= maxDist && atk.state === 'alive' && dist <= this.range) {
+                    this.target = atk;
+                    maxDist = dist;
+                }
+            }
+            // A new target within range has been found: fire!
+            if (this.target) {
+                return this.shoot(this.target);
+            }
         }
         return null;
     }; // aim
@@ -340,7 +344,6 @@ var Defender = (function () {
         this.shape.setAttribute('y', (this.position.y - Defender.shapeSize / 2).toString());
         this.shape.setAttribute('width', Defender.shapeSize.toString());
         this.shape.setAttribute('height', Defender.shapeSize.toString());
-        this.shape.setAttribute('fill', Defender.shapeColor);
         Game.level.shape.appendChild(this.shape);
     }; // draw
     /**
@@ -366,7 +369,6 @@ var Defender = (function () {
     }; // destroy
     Defender.ID = 0;
     Defender.shapeSize = Tile.shapeSize * 0.75; // shape's size
-    Defender.shapeColor = '#0047B2'; // shape's color (blue)
     return Defender;
 })(); // Defender
 /********************************************************
@@ -390,7 +392,7 @@ var Bullet = (function () {
         this.target = target;
         this.speed = speed / Game.fps;
         this.damage = damage;
-        this.distTg = distance(this.position, this.target.position);
+        this.distTg = distance(this.position, this.target.position) - this.target.hitboxRadius;
     } // constructor
     /**
      * Move bullet within a timeframe
@@ -414,7 +416,7 @@ var Bullet = (function () {
         var ratio = this.speed / distance;
         this.position.x += dx * ratio;
         this.position.y += dy * ratio;
-        this.distTg = distance - this.speed;
+        this.distTg = distance - this.speed - this.target.hitboxRadius;
     }; // move
     /**
      * Draw bullet's shape in DOM
@@ -426,7 +428,6 @@ var Bullet = (function () {
         this.shape.setAttribute('cx', this.position.x.toString());
         this.shape.setAttribute('cy', this.position.y.toString());
         this.shape.setAttribute('r', Bullet.shapeSize.toString());
-        this.shape.setAttribute('fill', Bullet.shapeColor);
         Game.level.shape.appendChild(this.shape);
     }; // draw
     /**
@@ -444,10 +445,16 @@ var Bullet = (function () {
      *********************************************************/
     Bullet.prototype.destroy = function () {
         this.shape.parentNode.removeChild(this.shape);
+        for (var i = 0; i < Game.atks.length; i++) {
+            var atk = Game.atks[i];
+            if (atk.id === this.id) {
+                Game.atks.splice(i, 1);
+                break;
+            }
+        }
     }; // destroy
     Bullet.ID = 0;
     Bullet.shapeSize = 3; // shape's size
-    Bullet.shapeColor = '#FFFF00'; // shape's color (yellow)
     return Bullet;
 })(); // Bullet
 /********************************************************
@@ -461,6 +468,43 @@ var Wave = (function () {
     Wave.delayInter = 10; // delay in seconds between two waves
     return Wave;
 })(); // Wave
+/********************************************************
+ * Status bar display management
+ *********************************************************/
+var Statusbar = (function () {
+    function Statusbar() {
+    }
+    /**
+     * Draw level's shape in DOM
+     *********************************************************/
+    Statusbar.draw = function () {
+        Game.statusbar = document.createElement('div');
+        Game.statusbar.setAttribute('width', Level.shapeWidth.toString());
+        Game.statusbar.setAttribute('height', Level.shapeHeight.toString());
+        Game.container.appendChild(Game.statusbar);
+        Statusbar.livesDom = document.createElement('span');
+        Statusbar.livesDom.setAttribute('class', 'lives');
+        Statusbar.livesDom.innerHTML = 'Lives: ' + Game.lives.toString();
+        Game.statusbar.appendChild(Statusbar.livesDom);
+        Statusbar.pointsDom = document.createElement('span');
+        Statusbar.pointsDom.setAttribute('class', 'points');
+        Statusbar.pointsDom.innerHTML = 'Points: ' + Game.points.toString();
+        Game.statusbar.appendChild(Statusbar.pointsDom);
+        Statusbar.nextWaveDom = document.createElement('span');
+        Statusbar.nextWaveDom.setAttribute('class', 'nextWave');
+        Statusbar.nextWaveDom.innerHTML = 'Next Wave: ' + Math.round(Game.wDelayInter / Game.fps).toString();
+        Game.statusbar.appendChild(Statusbar.nextWaveDom);
+    }; // draw
+    /**
+     * Update level within a timeframe
+     *********************************************************/
+    Statusbar.update = function () {
+        Statusbar.livesDom.innerHTML = 'Lives: ' + Game.lives.toString();
+        Statusbar.pointsDom.innerHTML = 'Points: ' + Game.points.toString();
+        Statusbar.nextWaveDom.innerHTML = 'Next Wave: ' + Math.round(Game.wDelayInter / Game.fps).toString();
+    }; // update
+    return Statusbar;
+})(); // Statusbar
 /********************************************************
  * Game
  * <br/>All members of this class are static.
@@ -510,14 +554,21 @@ var Game = (function () {
         Game.wAtks = 0;
         Game.wDelayIntra = 0;
         Game.wDelayInter = 0;
+        Game.lives = 5;
+        Game.points = 12;
         Game.draw();
     }; // init
     /**
      * Draw all game's shapes
      *********************************************************/
     Game.draw = function () {
-        Game.viewport = document.getElementById(Game.viewportID);
+        Game.container = document.getElementById(Game.containerID);
+        // Create viewport
+        Game.viewport = document.createElement('div');
+        Game.container.appendChild(Game.viewport);
         Game.level.draw();
+        // Create status bar
+        Statusbar.draw();
     }; // draw
     /**
      * Start game and update periodically
@@ -558,20 +609,23 @@ var Game = (function () {
                     var bullet = Game.bullets[i];
                     bullet.update();
                 }
+                // Update status bar informations
+                Statusbar.update();
                 Game.start();
             });
         }, 1000 / Game.fps); // update every 20 ms, Game.fps == 50 FPS
     }; // start
     Game.fps = 50; // frame per second
-    Game.viewportID = 'viewport'; // viewport ID defined in HTML document
+    Game.containerID = 'game'; // container ID defined in HTML document
     Game.atks = []; // attacking units
     Game.defs = []; // defending units
     Game.bullets = []; // bullets
+    Game.defCost = 3; // cost in points of a defending unit
     return Game;
 })(); // Game
 window.onload = function () {
+    Game.init();
     if (!DEBUG) {
-        Game.init();
         Game.start();
     }
 };
