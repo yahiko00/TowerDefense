@@ -691,6 +691,8 @@ class Statusbar {
 class Game {
   static state = 'running'; // Game state: running, stop
   static fps = 60; // frame per second
+  static timer: number; // timer
+  static interval: number;
   static containerID = 'game'; // container ID defined in HTML document
   static container: Element; // container in DOM
   static viewport: Element; // viewport in DOM containing all elements of a level
@@ -746,6 +748,9 @@ class Game {
     Wave.init();
 
     Game.draw();
+
+    Game.timer = Date.now();
+    Game.interval = 1000 / Game.fps;
   } // init
 
   /**
@@ -769,33 +774,14 @@ class Game {
   static run() {
     switch (Game.state) {
       case 'running':
-        setTimeout(() => {
-          // Update wave
-          Wave.update();
+        requestAnimationFrame(Game.run); // update every 16 ms, Game.fps == 60 FPS
 
-          // Update attacking units
-          for (var i = 0; i < Game.atks.length; i++) {
-            var atk = Game.atks[i];
-            atk.update();
-          } // for i
-
-          // Update defending units
-          for (var i = 0; i < Game.defs.length; i++) {
-            var def = Game.defs[i];
-            def.update();
-          } // for i
-
-          // Update bullets
-          for (var i = 0; i < Game.bullets.length; i++) {
-            var bullet = Game.bullets[i];
-            bullet.update();
-          } // for i
-
-          // Update status bar informations
-          Statusbar.update();
-
-          Game.run();
-        }, 1000 / Game.fps); // update every 16 ms, Game.fps == 60 FPS
+        var now = Date.now();
+        var delta = now - Game.timer;
+        if (delta > Game.interval) {
+          Game.timer = now - (delta % Game.interval);
+          Game.update();
+        }
         break;
       case 'stop':
         var popup = document.createElement('div');
@@ -804,7 +790,36 @@ class Game {
         Game.container.appendChild(popup);
         break;
     } // switch
-  } // start
+  } // run
+
+  /**
+   * Update game within a timeframe
+   *********************************************************/
+  static update() {
+    // Update wave
+    Wave.update();
+
+    // Update attacking units
+    for (var i = 0; i < Game.atks.length; i++) {
+      var atk = Game.atks[i];
+      atk.update();
+    } // for i
+
+    // Update defending units
+    for (var i = 0; i < Game.defs.length; i++) {
+      var def = Game.defs[i];
+      def.update();
+    } // for i
+
+    // Update bullets
+    for (var i = 0; i < Game.bullets.length; i++) {
+      var bullet = Game.bullets[i];
+      bullet.update();
+    } // for i
+
+    // Update status bar informations
+    Statusbar.update();
+  } // update
 } // Game
 
 window.onload = () => {

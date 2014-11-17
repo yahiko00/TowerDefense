@@ -597,6 +597,8 @@ var Game = (function () {
         Game.points = 120;
         Wave.init();
         Game.draw();
+        Game.timer = Date.now();
+        Game.interval = 1000 / Game.fps;
     }; // init
     /**
      * Draw all game's shapes
@@ -616,25 +618,13 @@ var Game = (function () {
     Game.run = function () {
         switch (Game.state) {
             case 'running':
-                setTimeout(function () {
-                    // Update wave
-                    Wave.update();
-                    for (var i = 0; i < Game.atks.length; i++) {
-                        var atk = Game.atks[i];
-                        atk.update();
-                    }
-                    for (var i = 0; i < Game.defs.length; i++) {
-                        var def = Game.defs[i];
-                        def.update();
-                    }
-                    for (var i = 0; i < Game.bullets.length; i++) {
-                        var bullet = Game.bullets[i];
-                        bullet.update();
-                    }
-                    // Update status bar informations
-                    Statusbar.update();
-                    Game.run();
-                }, 1000 / Game.fps); // update every 16 ms, Game.fps == 60 FPS
+                requestAnimationFrame(Game.run); // update every 16 ms, Game.fps == 60 FPS
+                var now = Date.now();
+                var delta = now - Game.timer;
+                if (delta > Game.interval) {
+                    Game.timer = now - (delta % Game.interval);
+                    Game.update();
+                }
                 break;
             case 'stop':
                 var popup = document.createElement('div');
@@ -643,7 +633,28 @@ var Game = (function () {
                 Game.container.appendChild(popup);
                 break;
         }
-    }; // start
+    }; // run
+    /**
+     * Update game within a timeframe
+     *********************************************************/
+    Game.update = function () {
+        // Update wave
+        Wave.update();
+        for (var i = 0; i < Game.atks.length; i++) {
+            var atk = Game.atks[i];
+            atk.update();
+        }
+        for (var i = 0; i < Game.defs.length; i++) {
+            var def = Game.defs[i];
+            def.update();
+        }
+        for (var i = 0; i < Game.bullets.length; i++) {
+            var bullet = Game.bullets[i];
+            bullet.update();
+        }
+        // Update status bar informations
+        Statusbar.update();
+    }; // update
     Game.state = 'running'; // Game state: running, stop
     Game.fps = 60; // frame per second
     Game.containerID = 'game'; // container ID defined in HTML document
