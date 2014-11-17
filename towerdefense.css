@@ -3,8 +3,21 @@
     font-family: 'Segoe UI', sans-serif;
 }
 
+#game {
+    text-align: center;
+}
+
+#level {
+    line-height: normal;
+}
+
+#statusbar {
+    line-height: 1em;
+}
+
 .tileWallEmpty {
     fill: #7A7A7A; /* lightgray */
+    stroke-width: 0;
 }
 
 .tileWallEmpty:hover {
@@ -45,16 +58,22 @@
 }
 
 .lives {
-    float: left;
-    width: 33%;
+    display: inline-block;
+    width: 266px;
 }
 
 .points {
-    float: left;
-    width: 33%;
+    display: inline-block;
+    width: 266px;
 }
 
 .nextWave {
-    float: left;
-    width: 33%;
+    display: inline-block;
+    width: 266px;
+}
+
+.popup {
+    font-weight: bold;
+    color: darkred;
+    text-align: center;
 }

@@ -1,5 +1,6 @@
 ﻿// Concepts
-// * Game State
+// * Attacking units' hit points getting higher and higher
+// * Game State: running, stop
 
 /********************************************************
  * 2D Point
@@ -45,20 +46,9 @@ function cellUpperLeft(cell: Cell): Point {
 } // cellUpperLeft
 
 /********************************************************
- * Shape in DOM
- *********************************************************/
-interface Shape {
-  shape: Element;
-
-  draw();
-  update();
-  destroy();
-} // Shape
-
-/********************************************************
  * Tile
  *********************************************************/
-class Tile implements Shape {
+class Tile {
   static ID = 0;
   id: string;
 
@@ -100,7 +90,7 @@ class Tile implements Shape {
       case 0: // wall
         this.shape.setAttribute('class', 'tileWallEmpty');
         this.shape.addEventListener('click', () => {
-          if (this.empty && Game.points >= Game.defCost) {
+          if (Game.state === 'running' && this.empty && Game.points >= Game.defCost) {
             // Add a defending unit
             var defender = new Defender(this.col, this.ln);
             Game.defs.push(defender);
@@ -138,7 +128,7 @@ class Tile implements Shape {
 /********************************************************
  * Level
  *********************************************************/
-class Level implements Shape {
+class Level {
   layout: number[][]; // level's layout (0: wall, 1:path)
   tiles: Tile[]; // level's tile
   path: Cell[]; // waypoints
@@ -176,6 +166,7 @@ class Level implements Shape {
    *********************************************************/
   draw() {
     this.shape = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    this.shape.setAttribute('id', 'level');
     this.shape.setAttribute('width', Level.shapeWidth.toString());
     this.shape.setAttribute('height', Level.shapeHeight.toString());
 
@@ -185,7 +176,7 @@ class Level implements Shape {
       tile.draw();
     } // for i
 
-    Game.viewport.appendChild(this.shape);
+    Game.viewport = this.shape;
   } // draw
 
   /**
@@ -205,7 +196,7 @@ class Level implements Shape {
 /********************************************************
  * Attacking unit
  *********************************************************/
-class Attacker implements Shape {
+class Attacker {
   static ID = 0;
   id: string;
   state: string; // alive, passed, dead
@@ -266,6 +257,11 @@ class Attacker implements Shape {
         this.state = 'passed';
         this.destroy();
         Game.lives -= 1;
+
+        if (Game.lives <= 0) {
+          Game.state = 'stop';
+        }
+
         return;
       }
 
@@ -300,7 +296,7 @@ class Attacker implements Shape {
     else {
       this.state = 'dead';
       this.destroy();
-      Game.points += 1;
+      Game.points += Game.atkGain;
     }
   } // hit
 
@@ -348,7 +344,7 @@ class Attacker implements Shape {
 /********************************************************
  * Defending unit
  *********************************************************/
-class Defender implements Shape {
+class Defender {
   static ID = 0;
   id: string;
   state: string; // ready, cooldown
@@ -588,16 +584,66 @@ class Bullet {
 } // Bullet
 
 /********************************************************
- * Wave of attacking units
+ * Wave of attacking units (helper class)
+ * <br/>All members of this class are static.
+ * <br/>This class should NOT be instanciated.
  *********************************************************/
 class Wave {
-  static atks = 5; // number of attacking unit per wave
+  static atks = 6; // number of attacking unit per wave
   static delayIntra = 0.75; // delay in seconds between two attacking unit in a same wave
   static delayInter = 10; // delay in seconds between two waves
+  static hpIncrease = 1.05; // Increase coefficient on attacking units' hit points per wave
+
+  static curAtks: number; // current remaning attacking unit to produce
+  static curDelayIntra: number; // current wave intra delay
+  static curDelayInter: number; // current wave inter delay
+  static curHpIncrease: number;
+  static curHp: number; // current attacking unit hit points
+
+  /**
+   * Initialize wave's parameters
+   *********************************************************/
+  static init() {
+    Wave.delayIntra *= Game.fps;
+    Wave.delayInter *= Game.fps;
+
+    Wave.curAtks = Wave.atks;
+    Wave.curDelayIntra = Wave.delayIntra;
+    Wave.curDelayInter = Wave.delayInter;
+    Wave.curHpIncrease = Wave.hpIncrease;
+    Wave.curHp = 100;
+  } // init
+
+  /**
+   * Update wave within a timeframe
+   *********************************************************/
+  static update() {
+    // Update timer between two attacking units within a wave
+    Wave.curDelayIntra -= 1;
+    if (Wave.curDelayIntra <= 0) {
+      Wave.curDelayIntra = Wave.delayIntra;
+      if (Wave.curAtks > 0) {
+        var attacker = new Attacker(Game.level.path, Wave.curHp);
+        attacker.draw();
+        Game.atks.push(attacker);
+        Wave.curAtks--;
+      }
+    }
+
+    // Update timer between waves
+    Wave.curDelayInter -= 1;
+    if (Wave.curDelayInter <= 0) {
+      Wave.curDelayInter = Wave.delayInter;
+      Wave.curAtks = Wave.atks;
+      Wave.curHp *= Wave.hpIncrease;
+    }
+  }
 } // Wave
 
 /********************************************************
- * Status bar display management
+ * Status bar display management (helper class)
+ * <br/>All members of this class are static.
+ * <br/>This class should NOT be instanciated.
  *********************************************************/
 class Statusbar {
   static livesDom: HTMLElement;
@@ -609,9 +655,7 @@ class Statusbar {
    *********************************************************/
   static draw() {
     Game.statusbar = document.createElement('div');
-    Game.statusbar.setAttribute('width', Level.shapeWidth.toString());
-    Game.statusbar.setAttribute('height', Level.shapeHeight.toString());
-    Game.container.appendChild(Game.statusbar);
+    Game.statusbar.setAttribute('id', 'statusbar');
 
     Statusbar.livesDom = document.createElement('span');
     Statusbar.livesDom.setAttribute('class', 'lives');
@@ -625,7 +669,7 @@ class Statusbar {
 
     Statusbar.nextWaveDom = document.createElement('span');
     Statusbar.nextWaveDom.setAttribute('class', 'nextWave');
-    Statusbar.nextWaveDom.innerHTML = 'Next Wave: ' + Math.round(Game.wDelayInter / Game.fps).toString();
+    Statusbar.nextWaveDom.innerHTML = 'Next Wave: ' + Math.round(Wave.curDelayInter / Game.fps).toString();
     Game.statusbar.appendChild(Statusbar.nextWaveDom);
   } // draw
 
@@ -635,7 +679,7 @@ class Statusbar {
   static update() {
     Statusbar.livesDom.innerHTML = 'Lives: ' + Game.lives.toString();
     Statusbar.pointsDom.innerHTML = 'Points: ' + Game.points.toString();
-    Statusbar.nextWaveDom.innerHTML = 'Next Wave: ' + Math.round(Game.wDelayInter / Game.fps).toString();
+    Statusbar.nextWaveDom.innerHTML = 'Next Wave: ' + Math.round(Wave.curDelayInter / Game.fps).toString();
   } // update
 } // Statusbar
 
@@ -645,7 +689,8 @@ class Statusbar {
  * <br/>This class should NOT be instanciated.
  *********************************************************/
 class Game {
-  static fps = 50; // frame per second
+  static state = 'running'; // Game state: running, stop
+  static fps = 60; // frame per second
   static containerID = 'game'; // container ID defined in HTML document
   static container: Element; // container in DOM
   static viewport: Element; // viewport in DOM containing all elements of a level
@@ -656,11 +701,10 @@ class Game {
   static bullets: Bullet[] = []; // bullets
   static lives: number; // lives remaining
   static points: number; // points remaining
-  static defCost = 3; // cost in points of a defending unit
+  static defCost = 30; // cost in points of a defending unit
+  static atkGain = 10; // gain in points of killing an attacking unit
 
-  static wAtks: number; // current remaning attacking unit to produce
-  static wDelayIntra: number; // current wave intra delay
-  static wDelayInter: number; // current wave intar delay
+  static wave: Wave; // wave of attacking units
 
   /**
    * Initialize game
@@ -696,14 +740,10 @@ class Game {
       ],
       20, 13);
 
-    Wave.delayIntra *= Game.fps;
-    Wave.delayInter *= Game.fps;
-    Game.wAtks = 0;
-    Game.wDelayIntra = 0;
-    Game.wDelayInter = 0;
-
     Game.lives = 5;
-    Game.points = 12;
+    Game.points = 120;
+
+    Wave.init();
 
     Game.draw();
   } // init
@@ -714,75 +754,63 @@ class Game {
   static draw() {
     Game.container = document.getElementById(Game.containerID);
 
-    // Create viewport
-    Game.viewport = document.createElement('div');
-    Game.container.appendChild(Game.viewport);
+    // Create level
     Game.level.draw();
+    Game.container.appendChild(Game.viewport);
 
     // Create status bar
     Statusbar.draw();
+    Game.container.appendChild(Game.statusbar);
   } // draw
 
   /**
    * Start game and update periodically
    *********************************************************/
-  static start() {
-    setTimeout(() => {
-      requestAnimationFrame(() => {
-        // Update timer between waves
-        if (Game.wDelayInter <= 0) {
-          Game.wDelayInter = Wave.delayInter;
-          Game.wAtks = Wave.atks;
-        }
-        else {
-          Game.wDelayInter -= 1;
-        }
+  static run() {
+    switch (Game.state) {
+      case 'running':
+        setTimeout(() => {
+          // Update wave
+          Wave.update();
 
-        // Update timer between two attacking units within a wave
-        if (Game.wDelayIntra <= 0) {
-          Game.wDelayIntra = Wave.delayIntra;
-          if (Game.wAtks > 0) {
-            var attacker = new Attacker(Game.level.path);
-            attacker.draw();
-            Game.atks.push(attacker);
-            Game.wAtks--;
-          }
-        }
-        else {
-          Game.wDelayIntra -= 1;
-        }
+          // Update attacking units
+          for (var i = 0; i < Game.atks.length; i++) {
+            var atk = Game.atks[i];
+            atk.update();
+          } // for i
 
-        // Update attacking units
-        for (var i = 0; i < Game.atks.length; i++) {
-          var atk = Game.atks[i];
-          atk.update();
-        } // for i
+          // Update defending units
+          for (var i = 0; i < Game.defs.length; i++) {
+            var def = Game.defs[i];
+            def.update();
+          } // for i
 
-        // Update defending units
-        for (var i = 0; i < Game.defs.length; i++) {
-          var def = Game.defs[i];
-          def.update();
-        } // for i
+          // Update bullets
+          for (var i = 0; i < Game.bullets.length; i++) {
+            var bullet = Game.bullets[i];
+            bullet.update();
+          } // for i
 
-        // Update bullets
-        for (var i = 0; i < Game.bullets.length; i++) {
-          var bullet = Game.bullets[i];
-          bullet.update();
-        } // for i
+          // Update status bar informations
+          Statusbar.update();
 
-        // Update status bar informations
-        Statusbar.update();
-
-        Game.start();
-      });
-    }, 1000 / Game.fps); // update every 20 ms, Game.fps == 50 FPS
+          Game.run();
+        }, 1000 / Game.fps); // update every 16 ms, Game.fps == 60 FPS
+        break;
+      case 'stop':
+        var popup = document.createElement('div');
+        popup.innerHTML = 'You lose!';
+        popup.setAttribute('class', 'popup');
+        Game.container.appendChild(popup);
+        break;
+    } // switch
   } // start
 } // Game
 
 window.onload = () => {
   Game.init();
   if (!DEBUG) {
-    Game.start();
+    Game.run();
   }
 }
 

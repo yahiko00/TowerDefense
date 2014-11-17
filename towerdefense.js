@@ -1,5 +1,6 @@
 // Concepts
-// * Game State
+// * Attacking units' hit points getting higher and higher
+// * Game State: running, stop
 /********************************************************
  * Compute Euclidian distance between two 2D-points
  * @param p1 First point
@@ -57,7 +58,7 @@ var Tile = (function () {
             case 0:
                 this.shape.setAttribute('class', 'tileWallEmpty');
                 this.shape.addEventListener('click', function () {
-                    if (_this.empty && Game.points >= Game.defCost) {
+                    if (Game.state === 'running' && _this.empty && Game.points >= Game.defCost) {
                         // Add a defending unit
                         var defender = new Defender(_this.col, _this.ln);
                         Game.defs.push(defender);
@@ -123,13 +124,14 @@ var Level = (function () {
      *********************************************************/
     Level.prototype.draw = function () {
         this.shape = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+        this.shape.setAttribute('id', 'level');
         this.shape.setAttribute('width', Level.shapeWidth.toString());
         this.shape.setAttribute('height', Level.shapeHeight.toString());
         for (var i = 0; i < this.tiles.length; i++) {
             var tile = this.tiles[i];
             tile.draw();
         }
-        Game.viewport.appendChild(this.shape);
+        Game.viewport = this.shape;
     }; // draw
     /**
      * Update level within a timeframe
@@ -188,6 +190,9 @@ var Attacker = (function () {
                 this.state = 'passed';
                 this.destroy();
                 Game.lives -= 1;
+                if (Game.lives <= 0) {
+                    Game.state = 'stop';
+                }
                 return;
             }
             var pointWp = cellCenter(this.path[this.waypoint]);
@@ -219,7 +224,7 @@ var Attacker = (function () {
         else {
             this.state = 'dead';
             this.destroy();
-            Game.points += 1;
+            Game.points += Game.atkGain;
         }
     }; // hit
     /**
@@ -459,18 +464,58 @@ var Bullet = (function () {
     return Bullet;
 })(); // Bullet
 /********************************************************
- * Wave of attacking units
+ * Wave of attacking units (helper class)
+ * <br/>All members of this class are static.
+ * <br/>This class should NOT be instanciated.
  *********************************************************/
 var Wave = (function () {
     function Wave() {
     }
-    Wave.atks = 5; // number of attacking unit per wave
+    /**
+     * Initialize wave's parameters
+     *********************************************************/
+    Wave.init = function () {
+        Wave.delayIntra *= Game.fps;
+        Wave.delayInter *= Game.fps;
+        Wave.curAtks = Wave.atks;
+        Wave.curDelayIntra = Wave.delayIntra;
+        Wave.curDelayInter = Wave.delayInter;
+        Wave.curHpIncrease = Wave.hpIncrease;
+        Wave.curHp = 100;
+    }; // init
+    /**
+     * Update wave within a timeframe
+     *********************************************************/
+    Wave.update = function () {
+        // Update timer between two attacking units within a wave
+        Wave.curDelayIntra -= 1;
+        if (Wave.curDelayIntra <= 0) {
+            Wave.curDelayIntra = Wave.delayIntra;
+            if (Wave.curAtks > 0) {
+                var attacker = new Attacker(Game.level.path, Wave.curHp);
+                attacker.draw();
+                Game.atks.push(attacker);
+                Wave.curAtks--;
+            }
+        }
+        // Update timer between waves
+        Wave.curDelayInter -= 1;
+        if (Wave.curDelayInter <= 0) {
+            Wave.curDelayInter = Wave.delayInter;
+            Wave.curAtks = Wave.atks;
+            Wave.curHp *= Wave.hpIncrease;
+        }
+    };
+    Wave.atks = 6; // number of attacking unit per wave
     Wave.delayIntra = 0.75; // delay in seconds between two attacking unit in a same wave
     Wave.delayInter = 10; // delay in seconds between two waves
+    Wave.hpIncrease = 1.05; // Increase coefficient on attacking units' hit points per wave
     return Wave;
 })(); // Wave
 /********************************************************
- * Status bar display management
+ * Status bar display management (helper class)
+ * <br/>All members of this class are static.
+ * <br/>This class should NOT be instanciated.
  *********************************************************/
 var Statusbar = (function () {
     function Statusbar() {
@@ -480,9 +525,7 @@ var Statusbar = (function () {
      *********************************************************/
     Statusbar.draw = function () {
         Game.statusbar = document.createElement('div');
-        Game.statusbar.setAttribute('width', Level.shapeWidth.toString());
-        Game.statusbar.setAttribute('height', Level.shapeHeight.toString());
-        Game.container.appendChild(Game.statusbar);
+        Game.statusbar.setAttribute('id', 'statusbar');
         Statusbar.livesDom = document.createElement('span');
         Statusbar.livesDom.setAttribute('class', 'lives');
         Statusbar.livesDom.innerHTML = 'Lives: ' + Game.lives.toString();
@@ -493,7 +536,7 @@ var Statusbar = (function () {
         Game.statusbar.appendChild(Statusbar.pointsDom);
         Statusbar.nextWaveDom = document.createElement('span');
         Statusbar.nextWaveDom.setAttribute('class', 'nextWave');
-        Statusbar.nextWaveDom.innerHTML = 'Next Wave: ' + Math.round(Game.wDelayInter / Game.fps).toString();
+        Statusbar.nextWaveDom.innerHTML = 'Next Wave: ' + Math.round(Wave.curDelayInter / Game.fps).toString();
         Game.statusbar.appendChild(Statusbar.nextWaveDom);
     }; // draw
     /**
@@ -502,7 +545,7 @@ var Statusbar = (function () {
     Statusbar.update = function () {
         Statusbar.livesDom.innerHTML = 'Lives: ' + Game.lives.toString();
         Statusbar.pointsDom.innerHTML = 'Points: ' + Game.points.toString();
-        Statusbar.nextWaveDom.innerHTML = 'Next Wave: ' + Math.round(Game.wDelayInter / Game.fps).toString();
+        Statusbar.nextWaveDom.innerHTML = 'Next Wave: ' + Math.round(Wave.curDelayInter / Game.fps).toString();
     }; // update
     return Statusbar;
 })(); // Statusbar
@@ -550,13 +593,9 @@ var Game = (function () {
             { col: 1, ln: 10 },
             { col: 1, ln: 13 }
         ], 20, 13);
-        Wave.delayIntra *= Game.fps;
-        Wave.delayInter *= Game.fps;
-        Game.wAtks = 0;
-        Game.wDelayIntra = 0;
-        Game.wDelayInter = 0;
         Game.lives = 5;
-        Game.points = 12;
+        Game.points = 120;
+        Wave.init();
         Game.draw();
     }; // init
     /**
@@ -564,70 +603,61 @@ var Game = (function () {
      *********************************************************/
     Game.draw = function () {
         Game.container = document.getElementById(Game.containerID);
-        // Create viewport
-        Game.viewport = document.createElement('div');
-        Game.container.appendChild(Game.viewport);
+        // Create level
         Game.level.draw();
+        Game.container.appendChild(Game.viewport);
         // Create status bar
         Statusbar.draw();
+        Game.container.appendChild(Game.statusbar);
     }; // draw
     /**
      * Start game and update periodically
      *********************************************************/
-    Game.start = function () {
-        setTimeout(function () {
-            requestAnimationFrame(function () {
-                // Update timer between waves
-                if (Game.wDelayInter <= 0) {
-                    Game.wDelayInter = Wave.delayInter;
-                    Game.wAtks = Wave.atks;
-                }
-                else {
-                    Game.wDelayInter -= 1;
-                }
-                // Update timer between two attacking units within a wave
-                if (Game.wDelayIntra <= 0) {
-                    Game.wDelayIntra = Wave.delayIntra;
-                    if (Game.wAtks > 0) {
-                        var attacker = new Attacker(Game.level.path);
-                        attacker.draw();
-                        Game.atks.push(attacker);
-                        Game.wAtks--;
+    Game.run = function () {
+        switch (Game.state) {
+            case 'running':
+                setTimeout(function () {
+                    // Update wave
+                    Wave.update();
+                    for (var i = 0; i < Game.atks.length; i++) {
+                        var atk = Game.atks[i];
+                        atk.update();
                     }
-                }
-                else {
-                    Game.wDelayIntra -= 1;
-                }
-                for (var i = 0; i < Game.atks.length; i++) {
-                    var atk = Game.atks[i];
-                    atk.update();
-                }
-                for (var i = 0; i < Game.defs.length; i++) {
-                    var def = Game.defs[i];
-                    def.update();
-                }
-                for (var i = 0; i < Game.bullets.length; i++) {
-                    var bullet = Game.bullets[i];
-                    bullet.update();
-                }
-                // Update status bar informations
-                Statusbar.update();
-                Game.start();
-            });
-        }, 1000 / Game.fps); // update every 20 ms, Game.fps == 50 FPS
+                    for (var i = 0; i < Game.defs.length; i++) {
+                        var def = Game.defs[i];
+                        def.update();
+                    }
+                    for (var i = 0; i < Game.bullets.length; i++) {
+                        var bullet = Game.bullets[i];
+                        bullet.update();
+                    }
+                    // Update status bar informations
+                    Statusbar.update();
+                    Game.run();
+                }, 1000 / Game.fps); // update every 16 ms, Game.fps == 60 FPS
+                break;
+            case 'stop':
+                var popup = document.createElement('div');
+                popup.innerHTML = 'You lose!';
+                popup.setAttribute('class', 'popup');
+                Game.container.appendChild(popup);
+                break;
+        }
     }; // start
-    Game.fps = 50; // frame per second
+    Game.state = 'running'; // Game state: running, stop
+    Game.fps = 60; // frame per second
     Game.containerID = 'game'; // container ID defined in HTML document
     Game.atks = []; // attacking units
     Game.defs = []; // defending units
     Game.bullets = []; // bullets
-    Game.defCost = 3; // cost in points of a defending unit
+    Game.defCost = 30; // cost in points of a defending unit
+    Game.atkGain = 10; // gain in points of killing an attacking unit
     return Game;
 })(); // Game
 window.onload = function () {
     Game.init();
     if (!DEBUG) {
-        Game.start();
+        Game.run();
     }
 };
 var DEBUG = false;
