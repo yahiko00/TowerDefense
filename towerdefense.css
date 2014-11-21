@@ -15,17 +15,17 @@
     line-height: 1em;
 }
 
-.tileWallEmpty {
+.tileLandEmpty {
     fill: #7A7A7A; /* lightgray */
     stroke-width: 0;
 }
 
-.tileWallEmpty:hover {
+.tileLandEmpty:hover {
     stroke-width: 1;
     stroke: #00FF00; /* green */
 }
 
-.tileWallOccupied {
+.tileLandOccupied {
     fill: #7A7A7A; /* lightgray */
 }
 

@@ -2,7 +2,17 @@
 // * Attacking units' hit points getting higher and higher
 // * Game State: running, stop
 /********************************************************
- * Compute Euclidian distance between two 2D-points
+ * Linear interpolation between two values
+ * @param v1 First value
+ * @param v2 Second value
+ * @param t Interpolation ratio between [0, 1] <br />
+ * where t=0 return p1 and t=1 return p2
+ *********************************************************/
+function lerp(v1, v2, t) {
+    return (1 - t) * v1 + t * v2;
+} // lerp
+/********************************************************
+ * Euclidian distance between two 2D-points
  * @param p1 First point
  * @param p2 Second point
  *********************************************************/
@@ -31,40 +41,38 @@ function cellUpperLeft(cell) {
 var Tile = (function () {
     /**
      * Constructor
+     * @param type Type of tile (0: land, 1: path)
      * @param col Column coordinate in cells
      * @param ln Line coordinate in cells
-     * @param type Type of tile (0: wall, 1: path)
      *********************************************************/
     function Tile(type, col, ln) {
-        this.id = 'tile.' + Tile.ID++;
         this.type = type;
-        this.col = col;
-        this.ln = ln;
-        this.position = cellUpperLeft({ col: col, ln: ln });
+        this.cell = { col: col, ln: ln };
+        this.position = cellUpperLeft(this.cell);
         this.empty = true;
     } // constructor
     /**
-     * Draw tile's shape in DOM
+     * Draw tile's shape in DOM.<br />
+     * Tile.container must be defined.
      *********************************************************/
     Tile.prototype.draw = function () {
         var _this = this;
         this.shape = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
-        this.shape.setAttribute('id', this.id);
         this.shape.setAttribute('x', this.position.x.toString());
         this.shape.setAttribute('y', this.position.y.toString());
         this.shape.setAttribute('width', Tile.shapeSize.toString());
         this.shape.setAttribute('height', Tile.shapeSize.toString());
         switch (this.type) {
             case 0:
-                this.shape.setAttribute('class', 'tileWallEmpty');
+                this.shape.setAttribute('class', 'tileLandEmpty');
                 this.shape.addEventListener('click', function () {
                     if (Game.state === 'running' && _this.empty && Game.points >= Game.defCost) {
                         // Add a defending unit
-                        var defender = new Defender(_this.col, _this.ln);
+                        var defender = new Defender(_this.cell.col, _this.cell.ln);
                         Game.defs.push(defender);
                         defender.draw();
                         _this.empty = false;
-                        _this.shape.setAttribute('class', 'tileWallOccupied');
+                        _this.shape.setAttribute('class', 'tileLandOccupied');
                         Game.points -= Game.defCost;
                     }
                 });
@@ -75,21 +83,15 @@ var Tile = (function () {
             default:
                 break;
         }
-        Game.level.shape.appendChild(this.shape);
+        Tile.container.appendChild(this.shape);
     }; // draw
-    /**
-     * Update tile within a timeframe
-     *********************************************************/
-    Tile.prototype.update = function () {
-    }; // update
     /**
      * Destroy tile's shape in DOM
      *********************************************************/
     Tile.prototype.destroy = function () {
         this.shape.parentNode.removeChild(this.shape);
     }; // destroy
-    Tile.ID = 0;
-    Tile.shapeSize = 40; // shape's size
+    Tile.shapeSize = 40; // shape's size in pixels
     return Tile;
 })(); // Tile
 /********************************************************
@@ -98,21 +100,20 @@ var Tile = (function () {
 var Level = (function () {
     /**
      * Constructor
-     * @param layout Level's layout (0: wall, 1:path)
+     * @param layout Level's layout (0: land, 1:path)
      * @param path Waypoints
      * @param width Width in cells
      * @param height Height in cells
      *********************************************************/
-    function Level(layout, path, width, height) {
-        if (width === void 0) { width = 20; }
-        if (height === void 0) { height = 13; }
-        this.layout = layout;
+    function Level(layout, path) {
         this.path = path;
         this.tiles = [];
-        for (var i = 0; i < layout.length; i++) {
-            var col = layout[i];
-            for (var j = 0; j < col.length; j++) {
-                var tile = new Tile(col[j], i, j);
+        var width;
+        var height;
+        for (var i = 0, height = layout.length; i < height; i++) {
+            var line = layout[i];
+            for (var j = 0, width = line.length; j < width; j++) {
+                var tile = new Tile(line[j], j, i);
                 this.tiles.push(tile);
             }
         }
@@ -120,24 +121,21 @@ var Level = (function () {
         Level.shapeHeight = height * Tile.shapeSize;
     } // constructor
     /**
-     * Draw level's shape in DOM
+     * Draw level's shape in DOM.<br />
+     * Level.container must be defined.
      *********************************************************/
     Level.prototype.draw = function () {
         this.shape = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
         this.shape.setAttribute('id', 'level');
         this.shape.setAttribute('width', Level.shapeWidth.toString());
         this.shape.setAttribute('height', Level.shapeHeight.toString());
+        Tile.container = this.shape;
         for (var i = 0; i < this.tiles.length; i++) {
             var tile = this.tiles[i];
             tile.draw();
         }
-        Game.viewport = this.shape;
+        Level.container.appendChild(this.shape);
     }; // draw
-    /**
-     * Update level within a timeframe
-     *********************************************************/
-    Level.prototype.update = function () {
-    }; // update
     /**
      * Destroy level's shape in DOM
      *********************************************************/
@@ -180,7 +178,7 @@ var Attacker = (function () {
         var pointWp = cellCenter(this.path[this.waypoint]);
         while (this.distWp - speed <= 0) {
             // Carry over
-            speed = speed - this.distWp;
+            speed -= this.distWp;
             // Move to next waypoint
             this.position = pointWp;
             this.waypoint++;
@@ -198,13 +196,10 @@ var Attacker = (function () {
             var pointWp = cellCenter(this.path[this.waypoint]);
             this.distWp = distance(this.position, pointWp);
         }
-        var dx = pointWp.x - this.position.x;
-        var dy = pointWp.y - this.position.y;
-        var dist = Math.sqrt(dx * dx + dy * dy);
-        var ratio = speed / dist;
-        this.position.x += dx * ratio;
-        this.position.y += dy * ratio;
-        this.distWp = dist - speed;
+        var ratio = speed / this.distWp;
+        this.position.x = lerp(this.position.x, pointWp.x, ratio);
+        this.position.y = lerp(this.position.y, pointWp.y, ratio);
+        this.distWp -= speed;
     }; // move
     /**
      * Inflict damage to unit
@@ -228,7 +223,8 @@ var Attacker = (function () {
         }
     }; // hit
     /**
-     * Draw unit's shape in DOM
+     * Draw unit's shape in DOM.<br />
+     * Attacker.container must be defined.
      *********************************************************/
     Attacker.prototype.draw = function () {
         this.shape = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
@@ -237,7 +233,7 @@ var Attacker = (function () {
         this.shape.setAttribute('cx', this.position.x.toString());
         this.shape.setAttribute('cy', this.position.y.toString());
         this.shape.setAttribute('r', (Attacker.shapeSize / 2).toString());
-        Game.level.shape.appendChild(this.shape);
+        Attacker.container.appendChild(this.shape);
     }; // draw
     /**
      * Update unit within a timeframe
@@ -263,7 +259,7 @@ var Attacker = (function () {
         }
     }; // destroy
     Attacker.ID = 0;
-    Attacker.shapeSize = 20; // shape's size
+    Attacker.shapeSize = 20; // shape's size in pixels
     return Attacker;
 })(); // Attacker
 /********************************************************
@@ -340,7 +336,8 @@ var Defender = (function () {
         }
     }; // cooldown
     /**
-     * Draw unit's shape in DOM
+     * Draw unit's shape in DOM.<br />
+     * Defender.container must be defined.
      *********************************************************/
     Defender.prototype.draw = function () {
         this.shape = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
@@ -350,7 +347,7 @@ var Defender = (function () {
         this.shape.setAttribute('y', (this.position.y - Defender.shapeSize / 2).toString());
         this.shape.setAttribute('width', Defender.shapeSize.toString());
         this.shape.setAttribute('height', Defender.shapeSize.toString());
-        Game.level.shape.appendChild(this.shape);
+        Defender.container.appendChild(this.shape);
     }; // draw
     /**
      * Update unit within a timeframe
@@ -374,7 +371,7 @@ var Defender = (function () {
         this.shape.parentNode.removeChild(this.shape);
     }; // destroy
     Defender.ID = 0;
-    Defender.shapeSize = Tile.shapeSize * 0.75; // shape's size
+    Defender.shapeSize = Tile.shapeSize * 0.75; // shape's size in pixels
     return Defender;
 })(); // Defender
 /********************************************************
@@ -425,7 +422,8 @@ var Bullet = (function () {
         this.distTg = distance - this.speed - this.target.hitboxRadius;
     }; // move
     /**
-     * Draw bullet's shape in DOM
+     * Draw bullet's shape in DOM.<br />
+     * Bullet.container must be defined.
      *********************************************************/
     Bullet.prototype.draw = function () {
         this.shape = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
@@ -434,7 +432,7 @@ var Bullet = (function () {
         this.shape.setAttribute('cx', this.position.x.toString());
         this.shape.setAttribute('cy', this.position.y.toString());
         this.shape.setAttribute('r', Bullet.shapeSize.toString());
-        Game.level.shape.appendChild(this.shape);
+        Bullet.container.appendChild(this.shape);
     }; // draw
     /**
      * Update bullet within a timeframe
@@ -460,7 +458,7 @@ var Bullet = (function () {
         }
     }; // destroy
     Bullet.ID = 0;
-    Bullet.shapeSize = 3; // shape's size
+    Bullet.shapeSize = 3; // shape's size in pixels
     return Bullet;
 })(); // Bullet
 /********************************************************
@@ -521,23 +519,25 @@ var Statusbar = (function () {
     function Statusbar() {
     }
     /**
-     * Draw level's shape in DOM
+     * Draw level's shape in DOM.<br />
+     * Statusbar.container must be defined.
      *********************************************************/
     Statusbar.draw = function () {
-        Game.statusbar = document.createElement('div');
-        Game.statusbar.setAttribute('id', 'statusbar');
+        Statusbar.shape = document.createElement('div');
+        Statusbar.shape.setAttribute('id', 'statusbar');
         Statusbar.livesDom = document.createElement('span');
         Statusbar.livesDom.setAttribute('class', 'lives');
         Statusbar.livesDom.innerHTML = 'Lives: ' + Game.lives.toString();
-        Game.statusbar.appendChild(Statusbar.livesDom);
+        Statusbar.shape.appendChild(Statusbar.livesDom);
         Statusbar.pointsDom = document.createElement('span');
         Statusbar.pointsDom.setAttribute('class', 'points');
         Statusbar.pointsDom.innerHTML = 'Points: ' + Game.points.toString();
-        Game.statusbar.appendChild(Statusbar.pointsDom);
+        Statusbar.shape.appendChild(Statusbar.pointsDom);
         Statusbar.nextWaveDom = document.createElement('span');
         Statusbar.nextWaveDom.setAttribute('class', 'nextWave');
         Statusbar.nextWaveDom.innerHTML = 'Next Wave: ' + Math.round(Wave.curDelayInter / Game.fps).toString();
-        Game.statusbar.appendChild(Statusbar.nextWaveDom);
+        Statusbar.shape.appendChild(Statusbar.nextWaveDom);
+        Statusbar.container.appendChild(Statusbar.shape);
     }; // draw
     /**
      * Update level within a timeframe
@@ -551,37 +551,42 @@ var Statusbar = (function () {
 })(); // Statusbar
 /********************************************************
  * Game
- * <br/>All members of this class are static.
- * <br/>This class should NOT be instanciated.
  *********************************************************/
-var Game = (function () {
-    function Game() {
-    }
+var Game;
+(function (Game) {
+    Game.state = 'running'; // Game state: running, stop
+    Game.fps = 60; // frames per second
+    var timer; // timer
+    var interval;
+    Game.containerID = 'game'; // container ID defined in HTML document
+    Game.container; // container in DOM
+    Game.level; // level
+    Game.atks = []; // attacking units
+    Game.defs = []; // defending units
+    Game.bullets = []; // bullets
+    Game.lives; // lives remaining
+    Game.points; // points remaining
+    Game.defCost = 30; // cost in points of a defending unit
+    Game.atkGain = 10; // gain in points of killing an attacking unit
+    Game.wave; // wave of attacking units
     /**
      * Initialize game
      *********************************************************/
-    Game.init = function () {
+    function init() {
         Game.level = new Level([
-            [0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-            [0, 1, 0, 0, 1, 1, 1, 1, 0, 0, 1, 1, 1],
-            [0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0],
-            [0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0],
-            [0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0],
-            [0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0],
-            [0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0],
-            [0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0],
-            [0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0],
-            [0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0],
-            [0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0],
-            [0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0],
-            [0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0],
-            [0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0],
-            [0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0],
-            [0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0],
-            [0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0],
-            [0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0],
-            [0, 1, 1, 1, 1, 0, 0, 1, 1, 1, 1, 0, 0],
-            [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+            [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+            [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0],
+            [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0],
+            [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0],
+            [0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0],
+            [0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+            [0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+            [0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0],
+            [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0],
+            [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0],
+            [0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0],
+            [0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+            [0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
         ], [
             { col: -1, ln: 1 },
             { col: 18, ln: 1 },
@@ -592,38 +597,43 @@ var Game = (function () {
             { col: 18, ln: 10 },
             { col: 1, ln: 10 },
             { col: 1, ln: 13 }
-        ], 20, 13);
+        ]);
         Game.lives = 5;
         Game.points = 120;
         Wave.init();
-        Game.draw();
-        Game.timer = Date.now();
-        Game.interval = 1000 / Game.fps;
-    }; // init
+        draw();
+        timer = Date.now();
+        interval = 1000 / Game.fps;
+    }
+    Game.init = init; // init
     /**
      * Draw all game's shapes
      *********************************************************/
-    Game.draw = function () {
+    function draw() {
         Game.container = document.getElementById(Game.containerID);
         // Create level
+        Level.container = Game.container;
         Game.level.draw();
-        Game.container.appendChild(Game.viewport);
         // Create status bar
+        Statusbar.container = Game.container;
         Statusbar.draw();
-        Game.container.appendChild(Game.statusbar);
-    }; // draw
+        // Initialize objects' containers
+        Defender.container = Game.level.shape;
+        Attacker.container = Game.level.shape;
+        Bullet.container = Game.level.shape;
+    } // draw
     /**
      * Start game and update periodically
      *********************************************************/
-    Game.run = function () {
+    function run() {
         switch (Game.state) {
             case 'running':
                 requestAnimationFrame(Game.run); // update every 16 ms, Game.fps == 60 FPS
                 var now = Date.now();
-                var delta = now - Game.timer;
-                if (delta > Game.interval) {
-                    Game.timer = now - (delta % Game.interval);
-                    Game.update();
+                var delta = now - timer;
+                if (delta > interval) {
+                    timer = now - (delta % interval);
+                    update();
                 }
                 break;
             case 'stop':
@@ -633,11 +643,12 @@ var Game = (function () {
                 Game.container.appendChild(popup);
                 break;
         }
-    }; // run
+    }
+    Game.run = run; // run
     /**
      * Update game within a timeframe
      *********************************************************/
-    Game.update = function () {
+    function update() {
         // Update wave
         Wave.update();
         for (var i = 0; i < Game.atks.length; i++) {
@@ -654,17 +665,8 @@ var Game = (function () {
         }
         // Update status bar informations
         Statusbar.update();
-    }; // update
-    Game.state = 'running'; // Game state: running, stop
-    Game.fps = 60; // frame per second
-    Game.containerID = 'game'; // container ID defined in HTML document
-    Game.atks = []; // attacking units
-    Game.defs = []; // defending units
-    Game.bullets = []; // bullets
-    Game.defCost = 30; // cost in points of a defending unit
-    Game.atkGain = 10; // gain in points of killing an attacking unit
-    return Game;
-})(); // Game
+    } // update
+})(Game || (Game = {})); // Game
 window.onload = function () {
     Game.init();
     if (!DEBUG) {
